@@ -32,6 +32,9 @@
 /assets
 /deployments
 typechain
+/server
+/ignition
+/scripts
 typechain-types
 coverage.json
 package.json
@@ -59,6 +62,7 @@ yarn-error.log*
 
 # local files
 *.local
+.gitignore
 
 # typescript
 *.tsbuildinfo
