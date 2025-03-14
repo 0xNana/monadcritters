@@ -29,7 +29,7 @@ export function ConnectButton() {
         ? 'Connecting...'
         : isConnected
         ? displayAddress
-        : 'Connect Wallet'}
+        : 'Log In'}
     </motion.button>
   )
 } 

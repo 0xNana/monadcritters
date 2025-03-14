@@ -13,74 +13,108 @@ type NavLinkProps = {
   children: ReactNode
 }
 
-function NavLink({ to, children }: NavLinkProps) {
+function NavLink({ to, children, comingSoon = false }: NavLinkProps & { comingSoon?: boolean }) {
   const location = useLocation()
   const isActive = location.pathname === to
 
   return (
-    <Link
-      to={to}
-      className={`
-        px-4 py-2 rounded-lg font-medium transition-all
-        ${isActive
-          ? 'bg-purple-500 text-white'
-          : 'text-gray-300 hover:text-white hover:bg-purple-500/20'
-        }
-      `}
-    >
-      {children}
-    </Link>
+    <div className="relative group">
+      <Link
+        to={to}
+        className={`
+          px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap
+          ${comingSoon ? 'opacity-50 cursor-not-allowed' : ''}
+          ${isActive
+            ? 'bg-purple-500 text-white'
+            : 'text-gray-300 hover:text-white hover:bg-purple-500/20'
+          }
+        `}
+        onClick={comingSoon ? (e) => e.preventDefault() : undefined}
+      >
+        {children}
+      </Link>
+      {comingSoon && (
+        <div className="absolute -top-2 -right-2 px-2 py-0.5 bg-purple-500 rounded-full text-[10px] font-medium text-white whitespace-nowrap">
+          Coming Soon
+        </div>
+      )}
+    </div>
   )
 }
 
 const NAV_LINKS = [
+  { to: '/', label: 'Home' },
   { to: '/mint', label: 'Mint' },
-  { to: '/gallery', label: 'Gallery' },
-  { to: '/shop', label: 'Shop' },
-  { to: '/lobby', label: 'Race' },
+  { to: '/lobby', label: 'Lobby' },
+  { to: '/race', label: 'Race' },
+  { to: '/leaderboard', label: 'Leaderboard', comingSoon: true },
 ]
 
 export function Layout({ children }: { children: ReactNode }) {
   const { isConnected } = useWallet()
   const location = useLocation()
-  const showNav = location.pathname !== '/' // Hide nav on landing page
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-purple-900 to-black text-white">
-      {showNav && (
-        <motion.header
-          initial={{ y: -100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="sticky top-0 z-50 backdrop-blur-lg bg-black/30 border-b border-white/10"
-        >
-          <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <Link to="/" className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
-              MonadCritters
-            </Link>
-
-            {isConnected && (
-              <div className="hidden md:flex items-center space-x-4">
-                {NAV_LINKS.map(link => (
-                  <NavLink key={link.to} to={link.to}>{link.label}</NavLink>
-                ))}
+      <motion.header
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="sticky top-0 z-50 backdrop-blur-lg bg-black/30 border-b border-white/10"
+      >
+        <div className="max-w-7xl mx-auto">
+          <div className="mx-4 sm:mx-6 lg:mx-8 h-16">
+            {/* Desktop Navigation */}
+            <div className="h-full hidden md:grid grid-cols-[220px_1fr_220px] items-center gap-8">
+              {/* Logo Section */}
+              <div className="flex items-center">
+                <Link 
+                  to="/" 
+                  className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 whitespace-nowrap"
+                >
+                  MonadCritters
+                </Link>
               </div>
-            )}
 
-            <div className="flex items-center gap-4">
-              <ConnectButton />
-              {isConnected && (
+              {/* Navigation Links - Center */}
+              <div className="flex items-center justify-center">
+                <div className="flex items-center space-x-6">
+                  {NAV_LINKS.map(link => (
+                    <NavLink key={link.to} to={link.to} comingSoon={link.comingSoon}>
+                      {link.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Section */}
+              <div className="flex items-center justify-end">
+                <ConnectButton />
+              </div>
+            </div>
+
+            {/* Mobile Navigation */}
+            <div className="h-full md:hidden flex items-center justify-between">
+              <Link 
+                to="/" 
+                className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 whitespace-nowrap"
+              >
+                MonadCritters
+              </Link>
+              
+              <div className="flex items-center gap-4">
+                <ConnectButton />
                 <button
                   onClick={() => setIsMobileMenuOpen(true)}
-                  className="md:hidden p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                 >
                   <Bars3Icon className="w-6 h-6" />
                 </button>
-              )}
+              </div>
             </div>
-          </nav>
-        </motion.header>
-      )}
+          </div>
+        </div>
+      </motion.header>
 
       <main className="flex-1">
         {children}

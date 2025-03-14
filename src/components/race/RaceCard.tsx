@@ -51,7 +51,7 @@ export const RaceCard: React.FC<RaceCardProps> = ({
 
       {error ? (
         <div className="text-red-400 text-sm mb-4">
-          Error loading races. Please try again.
+          Network error loading races. Please try again.
         </div>
       ) : null}
 

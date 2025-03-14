@@ -23,8 +23,8 @@ const Home: React.FC = () => {
               Mint. Race. Win.
             </h1>
             <p className="text-xl sm:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto">
-              Join the ultimate blockchain racing experience on Monad. 
-              Mint your unique Critter, compete in thrilling races, and win big rewards!
+              Join the ultimate race to win experience on Monad. 
+              Mint your unique Critter, compete in thrilling races, and win massive rewards.
             </p>
             
             {/* CTA Buttons */}
@@ -36,7 +36,7 @@ const Home: React.FC = () => {
                 Mint Your Critter
               </button>
               <button
-                onClick={() => navigate('/races')}
+                onClick={() => navigate('/race')}
                 className="px-8 py-4 bg-gradient-to-r from-gray-800 to-gray-700 hover:from-gray-700 hover:to-gray-600 text-white font-bold rounded-lg transform hover:scale-105 transition-all duration-200"
               >
                 View Active Races

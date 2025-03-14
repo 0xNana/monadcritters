@@ -816,12 +816,12 @@ const RaceView: React.FC = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={handleGoToLobby}
+          onClick={handleGoToLobby}
                 className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transform transition-all shadow-lg hover:shadow-purple-500/25"
-              >
-                Back to Lobby
+        >
+          Back to Lobby
               </motion.button>
-            </div>
+      </div>
           </motion.div>
 
           {/* Active Races Section */}
@@ -839,7 +839,7 @@ const RaceView: React.FC = () => {
               <div className="flex items-center justify-center py-8">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-purple-500 border-r-transparent"></div>
                 <span className="ml-3 text-gray-300">Loading races...</span>
-              </div>
+                  </div>
             ) : activeRaces.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {activeRaces.map((race) => (
@@ -854,27 +854,27 @@ const RaceView: React.FC = () => {
                       </span>
                       <span className={`px-3 py-1 rounded-full text-sm ${
                         race.status === RaceStatus.Active
-                          ? 'bg-green-500/20 text-green-300'
+                      ? 'bg-green-500/20 text-green-300'
                           : 'bg-blue-500/20 text-blue-300'
-                      }`}>
+                }`}>
                         {race.status}
                       </span>
-                    </div>
-                    
+              </div>
+
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Players</span>
                         <span className="text-gray-200">{race.currentPlayers}/{race.size}</span>
-                      </div>
+                </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Status</span>
                         <span className="text-gray-200">{race.progressStatus || 'Waiting'}</span>
-                      </div>
+              </div>
                       {race.startTime && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-400">Started</span>
                           <span className="text-gray-200">{formatTimeSpan(race.startTime)}</span>
-                        </div>
+                  </div>
                       )}
                     </div>
 
@@ -895,15 +895,15 @@ const RaceView: React.FC = () => {
                               <div 
                                 className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-1000"
                                 style={{ width: `${(countdowns[race.id.toString()] || 0) / RACE_DURATION * 100}%` }}
-                              />
-                            </div>
+                    />
+                  </div>
                             <div className="text-center text-sm text-gray-400">
                               Race in progress: {countdowns[race.id.toString()] || 0}s remaining
-                            </div>
+                  </div>
                           </div>
                         ) : null}
-                      </div>
-                    )}
+                </div>
+              )}
 
                     {race.status === RaceStatus.Completed && race.results && (
                       <div className="mt-4 space-y-3">
@@ -939,16 +939,16 @@ const RaceView: React.FC = () => {
                               {player.reward > 0 && (
                                 <div className="text-xs text-green-400">
                                   +{formatUnits(player.reward.toString(), 18)} MON
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                </div>
+              )}
+                    </div>
+                        </div>
                         ))}
-                      </div>
+                        </div>
                     )}
                   </motion.div>
                 ))}
-              </div>
+                  </div>
             ) : (
               <div className="text-center py-8">
                 <p className="text-gray-400 mb-4">No active races found</p>
@@ -960,8 +960,8 @@ const RaceView: React.FC = () => {
                 >
                   Join a Race
                 </motion.button>
-              </div>
-            )}
+                </div>
+              )}
           </motion.div>
 
           {/* Race Stats Section */}
@@ -981,29 +981,29 @@ const RaceView: React.FC = () => {
                   <div className="text-sm text-gray-400 mb-1">Prize Pool</div>
                   <div className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500">
                     {raceStats.totalPrizePool.toFixed(2)} MON
-                  </div>
-                </div>
+                      </div>
+              </div>
                 
                 <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600/50">
                   <div className="text-sm text-gray-400 mb-1">Highest Score</div>
                   <div className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500">
                     {raceStats.highestScore}
-                  </div>
-                </div>
-                
+            </div>
+      </div>
+
                 <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600/50">
                   <div className="text-sm text-gray-400 mb-1">Average Score</div>
                   <div className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
                     {raceStats.averageScore.toFixed(0)}
-                  </div>
-                </div>
-                
+              </div>
+            </div>
+
                 <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600/50">
                   <div className="text-sm text-gray-400 mb-1">Duration</div>
                   <div className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
                     {raceStats.duration}s
-                  </div>
-                </div>
+                          </div>
+            </div>
               </div>
             </motion.div>
           )}
@@ -1031,15 +1031,15 @@ const RaceView: React.FC = () => {
                       className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full transition-all duration-500"
                       style={{ width: `${processingStage?.progress || 0}%` }}
                     />
-                  </div>
+            </div>
                   
                   <p className="text-sm text-gray-400">
                     Please wait while we process the race results...
                   </p>
-                </div>
-              </div>
+          </div>
+        </div>
             </motion.div>
-          )}
+      )}
         </div>
       </div>
     </div>
