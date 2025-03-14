@@ -168,7 +168,160 @@ export default function RaceLobbyPage() {
   const [potentialWinnings, setPotentialWinnings] = useState<string>('0');
   const [selectedRaceForJoin, setSelectedRaceForJoin] = useState<RaceInfo | null>(null);
   
-  // Use useReadContracts for efficient data fetching
+  // Read user's actual power-up inventory from contract with optimized caching
+  const { data: speedBoosts, isError: speedError } = useReadContract({
+    address: contracts.monad.race as `0x${string}`,
+    abi: raceContractAbi,
+    functionName: 'playerInventory_SpeedBoost',
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled: !!address,
+      gcTime: 60_000, // 1 minute cache
+      staleTime: 30_000, // Consider data fresh for 30 seconds
+      refetchInterval: 30_000, // Only refetch every 30 seconds
+      retry: (failureCount, error: any) => {
+        if (!error?.message?.includes('429')) return false;
+        return failureCount < 5;
+      },
+      retryDelay: (failureCount) => {
+        return Math.min(1000 * Math.pow(2, failureCount - 1), 16000);
+      },
+    }
+  });
+
+  // Read user's critter balance with caching
+  const { data: critterBalance } = useReadContract({
+    address: contracts.monad.critter as `0x${string}`,
+    abi: critterAbi,
+    functionName: 'balanceOf',
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled: !!address,
+      gcTime: 60_000,
+      staleTime: 30_000,
+      refetchInterval: 30_000,
+      retry: (failureCount, error: any) => {
+        if (!error?.message?.includes('429')) return false;
+        return failureCount < 5;
+      },
+      retryDelay: (failureCount) => {
+        return Math.min(1000 * Math.pow(2, failureCount - 1), 16000);
+      },
+    }
+  });
+
+  // Read total supply with longer cache time as it changes less frequently
+  const { data: totalSupply } = useReadContract({
+    address: contracts.monad.critter as `0x${string}`,
+    abi: critterAbi,
+    functionName: 'totalSupply',
+    query: {
+      gcTime: 300_000, // 5 minutes
+      staleTime: 120_000, // 2 minutes
+      refetchInterval: 120_000, // 2 minutes
+      retry: (failureCount, error: any) => {
+        if (!error?.message?.includes('429')) return false;
+        return failureCount < 5;
+      },
+      retryDelay: (failureCount) => {
+        return Math.min(1000 * Math.pow(2, failureCount - 1), 16000);
+      },
+    }
+  });
+
+  // Constants for optimized loading
+  const REFRESH_INTERVAL = 30000; // 30 seconds
+  const BATCH_SIZE = 10;
+  const BATCH_DELAY = 200; // 200ms between batches
+
+  // Load user's critters with batching and rate limiting
+  useEffect(() => {
+    const loadCritters = async () => {
+      if (!address || !publicClient || !totalSupply || !critterBalance) return;
+
+      // Only set loading state if we don't have any critters yet
+      if (userCritters.length === 0) {
+        setIsLoadingCritters(true);
+      }
+
+      try {
+        const critters: Critter[] = [];
+        const maxTokenId = Math.min(100, Number(totalSupply));
+        let batchPromises: Promise<void>[] = [];
+        
+        // Process in batches
+        for (let i = 1; i <= maxTokenId; i += BATCH_SIZE) {
+          const batchEnd = Math.min(i + BATCH_SIZE - 1, maxTokenId);
+          // Clear the promises array for each batch
+          batchPromises = [];
+          
+          for (let tokenId = i; tokenId <= batchEnd; tokenId++) {
+            // Check if we already have this critter
+            const existingCritter = userCritters.find(c => c.id === tokenId.toString());
+            if (existingCritter) {
+              critters.push(existingCritter);
+              continue;
+            }
+
+            batchPromises.push(
+              (async () => {
+                try {
+                  const owner = await publicClient.readContract({
+                    address: contracts.monad.critter as `0x${string}`,
+                    abi: critterAbi,
+                    functionName: 'ownerOf',
+                    args: [BigInt(tokenId)]
+                  });
+
+                  if (owner === address) {
+                    const stats = await publicClient.readContract({
+                      address: contracts.monad.critter as `0x${string}`,
+                      abi: critterAbi,
+                      functionName: 'getStats',
+                      args: [BigInt(tokenId)]
+                    }) as unknown as CritterStats;
+
+                    critters.push({
+                      id: tokenId.toString(),
+                      rarity: rarityMap[stats.rarity],
+                      stats: {
+                        speed: stats.speed,
+                        stamina: stats.stamina,
+                        luck: stats.luck
+                      }
+                    });
+                  }
+                } catch (error) {
+                  console.debug('Error checking token:', tokenId, error);
+                }
+              })()
+            );
+          }
+
+          // Wait for batch to complete
+          await Promise.all(batchPromises);
+          
+          // Add delay between batches
+          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+        }
+
+        // Only update state if there are changes
+        if (JSON.stringify(critters) !== JSON.stringify(userCritters)) {
+          setUserCritters(critters);
+        }
+      } catch (error) {
+        console.error('Error loading critters:', error);
+      } finally {
+        setIsLoadingCritters(false);
+      }
+    };
+
+    loadCritters();
+    const interval = setInterval(loadCritters, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [address, publicClient, totalSupply, critterBalance, userCritters]);
+
+  // Optimize active races fetching
   const { data: activeRaces, isLoading: isLoadingRaces, refetch: refetchRaces } = useReadContracts({
     contracts: RACE_TYPES.map(raceType => ({
       address: contracts.monad.race as `0x${string}`,
@@ -177,9 +330,16 @@ export default function RaceLobbyPage() {
       args: [raceType.raceSize as number],
       query: {
         enabled: !!address && !!contracts.monad.race,
-        refetchInterval: 15000,
-        retry: true,
-        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchInterval: 30000, // 30 seconds
+        gcTime: 60000, // 1 minute
+        staleTime: 15000, // 15 seconds
+        retry: (failureCount, error: any) => {
+          if (!error?.message?.includes('429')) return false;
+          return failureCount < 5;
+        },
+        retryDelay: (failureCount) => {
+          return Math.min(1000 * Math.pow(2, failureCount - 1), 16000);
+        },
         select: (data: any) => {
           try {
             if (!data) {
@@ -301,7 +461,7 @@ export default function RaceLobbyPage() {
     })),
   });
 
-  // Watch for new races being created
+  // Optimize event watchers with conditional enabling
   useWatchContractEvent({
     address: contracts.monad.race as `0x${string}`,
     abi: raceContractAbi,
@@ -311,89 +471,11 @@ export default function RaceLobbyPage() {
         await refetchRaces();
       } catch (error) {
         console.error('Error refetching races after new race created:', error);
-        toast.error('Failed to update race list');
       }
-    }
+    },
+    enabled: isConnected // Only watch when connected
   });
 
-  // Update races state when data changes, following critter pattern
-  useEffect(() => {
-    if (!activeRaces) return;
-
-    // Create new races Map without referencing current state
-    const newRaces = new Map<string, RaceTypeMapping>();
-    
-    activeRaces.forEach((raceData, index) => {
-      const raceType = RACE_TYPES[index].type;
-      
-      if (raceData.status === 'success' && Array.isArray(raceData.result)) {
-        // Filter and sort races - only include active and non-ended races
-        const activeRaces = raceData.result
-          .filter(race => {
-            // Check if the race is still active and not ended
-            const isActive = race.isActive;
-            const hasEnded = race.hasEnded;
-            
-            // Check if the user is in this race
-            const userAddress = address?.toLowerCase();
-            const isUserInRace = userAddress && race.players.some(
-              player => player.toLowerCase() === userAddress
-            );
-            
-            // Only keep races that are:
-            // 1. Active and not ended OR
-            // 2. Have the user as a participant and haven't ended
-            return (isActive && !hasEnded) || (isUserInRace && !hasEnded);
-          })
-          .sort((a, b) => Number(a.id - b.id));
-
-        newRaces.set(raceType, {
-          races: activeRaces,
-          isLoading: false,
-          error: null
-        });
-      } else {
-        // Handle error case
-        console.error('Error loading races for type', raceType, raceData.error);
-        newRaces.set(raceType, {
-          races: [],
-          isLoading: false,
-          error: raceData.error instanceof Error ? raceData.error : new Error('Failed to load races')
-        });
-      }
-    });
-
-    // Only update state if there are actual changes
-    let hasChanges = false;
-    if (newRaces.size !== races.size) {
-      hasChanges = true;
-    } else {
-      for (const [type, mapping] of newRaces) {
-        const currentMapping = races.get(type);
-        if (!currentMapping || 
-            mapping.races.length !== currentMapping.races.length ||
-            mapping.error !== currentMapping.error) {
-          hasChanges = true;
-          break;
-        }
-        
-        // Compare serialized versions of the races
-        const serializedNew = mapping.races.map(serializeRaceForComparison);
-        const serializedCurrent = currentMapping.races.map(serializeRaceForComparison);
-        if (JSON.stringify(serializedNew) !== JSON.stringify(serializedCurrent)) {
-          hasChanges = true;
-          break;
-        }
-      }
-    }
-
-    if (hasChanges) {
-      setRaces(newRaces);
-      setLastLoadTime(Date.now());
-    }
-  }, [activeRaces, address, races]);
-
-  // Add RaceEnded event listener
   useWatchContractEvent({
     address: contracts.monad.race as `0x${string}`,
     abi: raceContractAbi,
@@ -401,7 +483,6 @@ export default function RaceLobbyPage() {
     onLogs: async (logs) => {
       try {
         console.log('Race ended event received:', logs);
-        // Refetch races to update UI
         await refetchRaces();
         
         // Navigate to race view if user was in this race
@@ -420,128 +501,34 @@ export default function RaceLobbyPage() {
       } catch (error) {
         console.error('Error processing race end event:', error);
       }
-    }
+    },
+    enabled: isConnected // Only watch when connected
   });
 
-  // Add RaceStarted event listener
   useWatchContractEvent({
     address: contracts.monad.race as `0x${string}`,
     abi: raceContractAbi,
-    eventName: 'RaceCreated' as const,
-    onLogs: async (logs) => {
+    eventName: 'PowerUpLoaded' as const,
+    onLogs: async () => {
       try {
-        console.log('Race started event received:', logs);
-        await refetchRaces();
-      } catch (error) {
-        console.error('Error processing race start event:', error);
-      }
-    }
-  });
-
-  // Read user's actual power-up inventory from contract
-  const { data: speedBoosts, isError: speedError } = useReadContract({
+        if (address && contracts.monad.race && publicClient) {
+          const result = await publicClient.readContract({
     address: contracts.monad.race as `0x${string}`,
     abi: raceContractAbi,
     functionName: 'playerInventory_SpeedBoost',
-    args: address ? [address as `0x${string}`] : undefined
+            args: [address as `0x${string}`]
   });
 
-  // Update userPowerUps when contract data changes
-  useEffect(() => {
-    if (speedBoosts !== undefined) {
       setUserPowerUps({
-        speedBoosts: Number(speedBoosts)
+            speedBoosts: Number(result)
       });
     }
-  }, [speedBoosts]);
-  
-  // Read user's critter balance
-  const { data: critterBalance } = useReadContract({
-    address: contracts.monad.critter as `0x${string}`,
-    abi: critterAbi,
-    functionName: 'balanceOf',
-    args: address ? [address as `0x${string}`] : undefined,
-  });
-
-  // Read total supply to know the range of token IDs
-  const { data: totalSupply } = useReadContract({
-    address: contracts.monad.critter as `0x${string}`,
-    abi: critterAbi,
-    functionName: 'totalSupply',
-  });
-
-  // Load user's critters
-  useEffect(() => {
-    const loadCritters = async () => {
-      if (!address || !publicClient || !totalSupply || !critterBalance) return;
-
-      // Only set loading state if we don't have any critters yet
-      if (userCritters.length === 0) {
-      setIsLoadingCritters(true);
-      }
-
-      try {
-        const critters: Critter[] = [];
-        
-        // For simplicity in the MVP, we'll just check the first 100 tokens
-        // In a production app, we would use a more efficient method
-        for (let tokenId = 1; tokenId <= Math.min(100, Number(totalSupply)); tokenId++) {
-            try {
-              const owner = await publicClient.readContract({
-                address: contracts.monad.critter as `0x${string}`,
-                abi: critterAbi,
-                functionName: 'ownerOf',
-                args: [BigInt(tokenId)]
-              });
-
-              if (owner === address) {
-                // Check if we already have this critter in our state to avoid re-fetching
-                const existingCritter = userCritters.find(c => c.id === tokenId.toString());
-                if (existingCritter) {
-                  critters.push(existingCritter);
-                } else {
-                  const stats = await publicClient.readContract({
-                    address: contracts.monad.critter as `0x${string}`,
-                    abi: critterAbi,
-                    functionName: 'getStats',
-                    args: [BigInt(tokenId)]
-                  }) as unknown as CritterStats;
-
-                critters.push({
-                  id: tokenId.toString(),
-                  rarity: rarityMap[stats.rarity],
-                  stats: {
-                    speed: stats.speed,
-                    stamina: stats.stamina,
-                    luck: stats.luck
-                  }
-                });
-                }
-              }
-            } catch (error) {
-              console.debug('Error checking token:', tokenId, error);
-            }
-        }
-
-        // Only update state if we have new data and it's different from current state
-        if (critters.length > 0 && JSON.stringify(critters) !== JSON.stringify(userCritters)) {
-          setUserCritters(critters);
-        }
       } catch (error) {
-        console.error('Error loading critters:', error);
-        toast.error('Failed to load your critters');
-      } finally {
-        setIsLoadingCritters(false);
+        console.error('Error updating power-ups after event:', error);
       }
-    };
-
-    loadCritters();
-    
-    // Set up a less frequent interval for refreshing critters
-    // This prevents the UI from constantly refreshing and causing flickering
-    const interval = setInterval(loadCritters, 15000); // Refresh every 15 seconds instead of with every render
-    return () => clearInterval(interval);
-  }, [address, publicClient, totalSupply, critterBalance]);
+    },
+    enabled: isConnected && !!address // Only watch when connected and address available
+  });
 
   // Calculate potential winnings based on selected race type - memoize the calculation
   const potentialWinningsValue = React.useMemo(() => {
@@ -1036,32 +1023,6 @@ export default function RaceLobbyPage() {
       />
     );
   };
-
-  // Add effect to fetch user's power-ups when contract events occur
-  useWatchContractEvent({
-    address: contracts.monad.race as `0x${string}`,
-    abi: raceContractAbi,
-    eventName: 'PowerUpLoaded' as const,
-    onLogs: async () => {
-      try {
-        // Refetch user's power-ups after any power-up event
-        if (address && contracts.monad.race && publicClient) {
-          const result = await publicClient.readContract({
-            address: contracts.monad.race as `0x${string}`,
-            abi: raceContractAbi,
-            functionName: 'playerInventory_SpeedBoost',
-            args: [address as `0x${string}`]
-          });
-
-          setUserPowerUps({
-            speedBoosts: Number(result)
-          });
-        }
-      } catch (error) {
-        console.error('Error updating power-ups after event:', error);
-      }
-    }
-  });
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900">

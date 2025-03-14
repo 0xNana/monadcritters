@@ -1,18 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWallet } from '../components/WalletProvider'
 import { motion, AnimatePresence } from 'framer-motion'
 import { parseEther } from 'viem'
 import { useWriteContract, useWatchContractEvent, useReadContract, useChainId } from 'wagmi'
+import { useQueryClient } from '@tanstack/react-query'
 import { contracts, gameConfig } from '../utils/config'
-
+import React from 'react'
 
 // Import all mascot variants
 import commonMascot from '@assets/mascot/common/256/common 256x256.png'
 import uncommonMascot from '@assets/mascot/uncommon/256/256x256.png'
 import rareMascot from '@assets/mascot/rare/256/rare 256x256.png'
 import legendaryMascot from '@assets/mascot/legendary/256/legendary 256.png'
-import React from 'react'
 
 // Rarity types configuration
 const RARITY_TYPES = [
@@ -68,6 +68,9 @@ function useContractAddress() {
     : contracts.monad.critter;
 }
 
+// Add this type for minting states
+type MintingState = 'idle' | 'awaiting_approval' | 'minting' | 'success' | 'failed';
+
 export default function MintingPage() {
   const navigate = useNavigate()
   const { isConnected, address } = useWallet()
@@ -78,6 +81,27 @@ export default function MintingPage() {
   const [isMinted, setIsMinted] = useState(false)
   const [mintSuccess, setMintSuccess] = useState<boolean | null>(null)
   const [newTokenId, setNewTokenId] = useState<string | null>(null)
+  const [mintingState, setMintingState] = useState<MintingState>('idle')
+  const [errorMessage, setErrorMessage] = useState<string>('')
+
+  const queryClient = useQueryClient()
+
+  // Reset states when wallet is disconnected
+  useEffect(() => {
+    if (!isConnected) {
+      setIsMinting(false)
+      setIsMinted(false)
+      setMintSuccess(null)
+      setNewTokenId(null)
+      setMintingState('idle')
+      setErrorMessage('')
+      
+      // Clear any existing timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [isConnected])
 
   // Read the number of mints the user has already done
   const { data: mintsUsed = 0n } = useReadContract({
@@ -87,14 +111,38 @@ export default function MintingPage() {
     args: address ? [address as `0x${string}`] : undefined,
     query: {
       enabled: !!address,
+      gcTime: 60_000, // 1 minute
+      staleTime: 30_000, // 30 seconds
+      refetchInterval: 30_000, // 30 seconds
+      retry: (failureCount, error: any) => {
+        // Don't retry if error is not related to rate limiting
+        if (!error?.message?.includes('429')) return false;
+        return failureCount < 5; // Maximum 5 retries
+      },
+      retryDelay: (failureCount) => {
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+        return Math.min(1000 * Math.pow(2, failureCount - 1), 16000);
+      },
     },
   })
 
-  // Read the maximum mints per wallet
+  // Read the maximum mints per wallet - this is a constant, so we can cache it longer
   const { data: maxMints = 4n } = useReadContract({
     address: contractAddress as `0x${string}`,
     abi: maxMintsAbi,
     functionName: 'MAX_MINTS_PER_WALLET',
+    query: {
+      gcTime: 3_600_000, // 1 hour
+      staleTime: 3_600_000, // 1 hour
+      refetchInterval: 3_600_000, // 1 hour
+      retry: (failureCount, error: any) => {
+        if (!error?.message?.includes('429')) return false;
+        return failureCount < 5;
+      },
+      retryDelay: (failureCount) => {
+        return Math.min(1000 * Math.pow(2, failureCount - 1), 16000);
+      },
+    },
   })
 
   // Auto-cycle through rarities
@@ -103,35 +151,24 @@ export default function MintingPage() {
       if (!isHovered) {
         setCurrentRarityIndex((prev) => (prev + 1) % RARITY_TYPES.length)
       }
-    }, 3000)
+    }, 20000)
     return () => clearInterval(interval)
   }, [isHovered])
 
   // Contract interaction
   const { writeContract } = useWriteContract()
 
-  // Watch for Transfer events
-  useWatchContractEvent({
-    address: contractAddress as `0x${string}`,
-    abi: transferAbi,
-    eventName: 'Transfer',
-    onLogs(logs) {
-      // Check if the event is for our address
-      const ourEvent = logs.find(log => 
-        log.args.to?.toLowerCase() === address?.toLowerCase()
-      )
-      if (ourEvent) {
-        setIsMinting(false)
-        setMintSuccess(true)
-        setNewTokenId(ourEvent.args.tokenId ? ourEvent.args.tokenId.toString() : null)
-        
-        // Set a timeout before navigating to gallery
-        setTimeout(() => {
-          setIsMinted(true)
-        }, 3000)
+  // Add timeout ref to clear timeout when needed
+  const timeoutRef = React.useRef<NodeJS.Timeout>();
+
+  // Clear timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
-    },
-  })
+    };
+  }, []);
 
   // Handle mint with proper value
   const handleMint = async () => {
@@ -140,21 +177,92 @@ export default function MintingPage() {
       return
     }
     
+    // Clear any existing timeouts
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
     try {
-      setIsMinting(true)
-      setMintSuccess(null)
-      await writeContract({
+      setMintingState('awaiting_approval')
+      setErrorMessage('')
+      const tx = await writeContract({
         address: contractAddress as `0x${string}`,
         abi: mintAbi,
         functionName: 'mint',
         value: parseEther(gameConfig.mintPrice.toString()),
       })
-    } catch (error) {
+      
+      // Set a timeout to revert to idle if no confirmation after 30 seconds
+      setMintingState('minting')
+      timeoutRef.current = setTimeout(() => {
+        if (mintingState === 'minting') {
+          setMintingState('failed')
+          setErrorMessage('Transaction taking too long. Please try again.')
+          timeoutRef.current = setTimeout(() => {
+            setMintingState('idle')
+            setErrorMessage('')
+          }, 3000)
+        }
+      }, 30000)
+
+    } catch (error: any) {
       console.error('Failed to mint:', error)
-      setIsMinting(false)
-      setMintSuccess(false)
+      setMintingState('failed')
+      
+      // Handle user rejection
+      if (error?.message?.includes('User rejected') || error?.code === 'ACTION_REJECTED') {
+        setErrorMessage('Transaction was rejected. Please try again.')
+      } 
+      // Handle insufficient funds
+      else if (error?.message?.includes('insufficient funds')) {
+        setErrorMessage('Insufficient MON balance for minting.')
+      }
+      // Handle other errors
+      else {
+        setErrorMessage(error?.message || 'Transaction failed. Please try again.')
+      }
+
+      // Reset to idle state after 3 seconds
+      timeoutRef.current = setTimeout(() => {
+        setMintingState('idle')
+        setErrorMessage('')
+      }, 3000)
     }
   }
+
+  // Watch for Transfer events with retry logic
+  useWatchContractEvent({
+    address: contractAddress as `0x${string}`,
+    abi: transferAbi,
+    eventName: 'Transfer',
+    enabled: mintingState === 'minting',
+    onLogs(logs) {
+      // Clear any existing timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      // Check if the event is for our address
+      const ourEvent = logs.find(log => 
+        log.args.to?.toLowerCase() === address?.toLowerCase()
+      )
+      if (ourEvent) {
+        setMintingState('success')
+        setNewTokenId(ourEvent.args.tokenId ? ourEvent.args.tokenId.toString() : null)
+        
+        // Set a timeout before navigating to gallery
+        timeoutRef.current = setTimeout(() => {
+          setIsMinted(true)
+        }, 3000)
+      }
+    },
+    onError: (error) => {
+      if (error?.message?.includes('429')) {
+        // If we hit rate limit, we'll retry with exponential backoff
+        console.warn('Rate limit hit, retrying with backoff...');
+      }
+    },
+  })
 
   // Navigate to gallery after successful mint
   useEffect(() => {
@@ -165,6 +273,81 @@ export default function MintingPage() {
 
   const currentRarity = RARITY_TYPES[currentRarityIndex]
   const remainingMints = Number(maxMints - mintsUsed)
+
+  // Add manual refresh for mints count after successful mint
+  const refreshMintsCount = useCallback(() => {
+    if (mintingState === 'success') {
+      queryClient.invalidateQueries({ 
+        queryKey: ['mintsPerWallet', address] 
+      })
+    }
+  }, [mintingState, address])
+
+  // Update mints count after successful mint
+  useEffect(() => {
+    refreshMintsCount()
+  }, [mintingState, refreshMintsCount])
+
+  // Render minting status message
+  const renderMintingStatus = () => {
+    switch (mintingState) {
+      case 'awaiting_approval':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center gap-2 text-yellow-400 bg-yellow-400/10 px-4 py-2 rounded-lg"
+          >
+            <svg className="animate-pulse w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10m9.374-14.666L19.2 4.8a2 2 0 01-1.4 1.4l-1.534.174a2 2 0 00-1.666 1.666l-.174 1.534a2 2 0 01-1.4 1.4l-1.534.174a2 2 0 00-1.666 1.666l-.174 1.534a2 2 0 01-1.4 1.4l-1.534.174a2 2 0 00-1.666 1.666l-.174 1.534a2 2 0 01-1.4 1.4L4.8 19.2" />
+            </svg>
+            Please confirm the transaction in your wallet...
+          </motion.div>
+        )
+      case 'minting':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center gap-2 text-blue-400 bg-blue-400/10 px-4 py-2 rounded-lg"
+          >
+            <svg className="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Minting your critter...
+          </motion.div>
+        )
+      case 'success':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center gap-2 text-green-400 bg-green-400/10 px-4 py-2 rounded-lg"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Mint successful! Redirecting to gallery...
+          </motion.div>
+        )
+      case 'failed':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center gap-2 text-red-400 bg-red-400/10 px-4 py-2 rounded-lg"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            {errorMessage || 'Minting failed. Please try again.'}
+          </motion.div>
+        )
+      default:
+        return null
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900">
@@ -190,7 +373,8 @@ export default function MintingPage() {
               </span>
             </h1>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              {/* Left Column - Critter Preview */}
               <div className="relative w-80 h-80 mx-auto">
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -237,17 +421,19 @@ export default function MintingPage() {
                 )}
               </div>
 
-              <div className="space-y-6 text-left">
-                <div>
-                  <h2 className="text-2xl font-bold mb-4">
-                    <span className={`text-transparent bg-clip-text bg-gradient-to-r ${currentRarity.color}`}>
-                      {currentRarity.name} Critter
-                    </span>
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700/50">
-                      <h3 className="text-lg font-semibold mb-2">Rarity</h3>
+              {/* Right Column - Stats */}
+              <div>
+                <h2 className="text-2xl font-bold mb-4">
+                  <span className={`text-transparent bg-clip-text bg-gradient-to-r ${currentRarity.color}`}>
+                    {currentRarity.name} Critter
+                  </span>
+                </h2>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Rarity Card */}
+                  <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700/50 h-full">
+                    <h3 className="text-lg font-semibold mb-4">Rarity</h3>
+                    <div className="space-y-4">
                       <div className="flex justify-between">
                         <span className="text-gray-300">Chance</span>
                         <span className="font-medium text-gray-200">{currentRarity.chance}</span>
@@ -257,92 +443,122 @@ export default function MintingPage() {
                         <span className="font-medium text-gray-200">{currentRarity.boost}</span>
                       </div>
                     </div>
-                    
-                    <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700/50">
-                      <h3 className="text-lg font-semibold mb-2">Potential Stats</h3>
-                      <div className="space-y-2">
+                  </div>
+                  
+                  {/* Potential Stats Card */}
+                  <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700/50 h-full">
+                    <h3 className="text-lg font-semibold mb-4">Potential Stats</h3>
+                    <div className="space-y-4">
+                      {/* Speed Stat */}
+                      <div>
+                        <div className="flex justify-between text-sm text-gray-300 mb-1">
+                          <span>Speed</span>
+                          <span>{currentRarity.minStat}-{currentRarity.maxStat}</span>
+                        </div>
                         <div className="w-full bg-gray-700/50 h-2 rounded-full overflow-hidden">
                           <motion.div 
                             className={`h-full rounded-full bg-gradient-to-r ${currentRarity.color}`}
-                            initial={{ width: 0 }}
-                            animate={{ width: '100%' }}
-                            transition={{ duration: 1, repeat: Infinity, repeatType: 'reverse' }}
+                            initial={{ width: '0%' }}
+                            animate={{ width: ['0%', '100%', '0%'] }}
+                            transition={{ 
+                              duration: 3,
+                              repeat: Infinity,
+                              ease: "easeInOut"
+                            }}
                           />
                         </div>
-                        <div className="flex justify-between text-sm text-gray-300">
-                          <span>Speed: {currentRarity.minStat}-{currentRarity.maxStat}</span>
-                          <span>Stamina: {currentRarity.minStat}-{currentRarity.maxStat}</span>
-                          <span>Luck: {currentRarity.minStat}-{currentRarity.maxStat}</span>
+                      </div>
+
+                      {/* Stamina Stat */}
+                      <div>
+                        <div className="flex justify-between text-sm text-gray-300 mb-1">
+                          <span>Stamina</span>
+                          <span>{currentRarity.minStat}-{currentRarity.maxStat}</span>
+                        </div>
+                        <div className="w-full bg-gray-700/50 h-2 rounded-full overflow-hidden">
+                          <motion.div 
+                            className={`h-full rounded-full bg-gradient-to-r ${currentRarity.color}`}
+                            initial={{ width: '0%' }}
+                            animate={{ width: ['0%', '100%', '0%'] }}
+                            transition={{ 
+                              duration: 3,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                              delay: 1
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Luck Stat */}
+                      <div>
+                        <div className="flex justify-between text-sm text-gray-300 mb-1">
+                          <span>Luck</span>
+                          <span>{currentRarity.minStat}-{currentRarity.maxStat}</span>
+                        </div>
+                        <div className="w-full bg-gray-700/50 h-2 rounded-full overflow-hidden">
+                          <motion.div 
+                            className={`h-full rounded-full bg-gradient-to-r ${currentRarity.color}`}
+                            initial={{ width: '0%' }}
+                            animate={{ width: ['0%', '100%', '0%'] }}
+                            transition={{ 
+                              duration: 3,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                              delay: 2
+                            }}
+                          />
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-                
-                <div className="space-y-4">
-                  <p className="text-xl text-gray-200">
-                    Mint Price: <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">{gameConfig.mintPrice} MON</span>
-                  </p>
-                  
-                  {isConnected && (
-                    <p className="text-sm text-gray-400">
-                      You have minted {mintsUsed.toString()}/{maxMints.toString()} critters
-                      {remainingMints > 0 ? ` (${remainingMints} remaining)` : ' (max reached)'}
-                    </p>
-                  )}
+              </div>
+            </div>
 
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleMint}
-                    disabled={!isConnected || isMinting || mintsUsed >= maxMints}
-                    className={`
-                      w-full px-8 py-4 rounded-lg font-bold transition-all transform
-                      ${isConnected && mintsUsed < maxMints
-                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-purple-500/25'
-                        : 'bg-gray-800/50 text-gray-400 cursor-not-allowed border border-gray-700/50'
-                      }
-                    `}
-                  >
-                    {!isConnected ? (
-                      'Connect Wallet to Mint'
-                    ) : mintsUsed >= maxMints ? (
-                      'Max Mints Reached'
-                    ) : isMinting ? (
-                      <div className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Minting...
-                      </div>
-                    ) : (
-                      'Mint Now'
-                    )}
-                  </motion.button>
-                  
-                  {mintSuccess === false && (
-                    <p className="text-sm text-red-400">
-                      Minting failed. Please try again.
-                    </p>
-                  )}
-                  
-                  {isMinting && (
-                    <p className="text-sm text-gray-400 animate-pulse">
-                      Please confirm the transaction in your wallet...
-                    </p>
-                  )}
-                  
-                  {mintSuccess && (
-                    <motion.p 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="text-sm text-green-400"
-                    >
-                      Mint successful! Redirecting to your gallery...
-                    </motion.p>
-                  )}
-                </div>
+            {/* Minting Controls - Below Both Columns */}
+            <div className="mt-8 max-w-md mx-auto w-full space-y-4">
+              <div className="text-center">
+                <p className="text-xl text-gray-200">
+                  Mint Price: <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">{gameConfig.mintPrice} MON</span>
+                </p>
+                
+                {isConnected && (
+                  <p className="text-sm text-gray-400 mt-2">
+                    You have minted {mintsUsed.toString()}/{maxMints.toString()} critters
+                    {remainingMints > 0 ? ` (${remainingMints} remaining)` : ' (max reached)'}
+                  </p>
+                )}
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleMint}
+                disabled={!isConnected || mintingState === 'minting' || mintingState === 'awaiting_approval' || mintsUsed >= maxMints}
+                className={`
+                  w-full px-8 py-4 rounded-lg font-bold transition-all transform
+                  ${isConnected && mintsUsed < maxMints && mintingState === 'idle'
+                    ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-purple-500/25'
+                    : 'bg-gray-800/50 text-gray-400 cursor-not-allowed border border-gray-700/50'
+                  }
+                `}
+              >
+                {!isConnected 
+                  ? 'Connect Wallet to Mint'
+                  : mintsUsed >= maxMints 
+                  ? 'Max Mints Reached'
+                  : mintingState === 'awaiting_approval'
+                  ? 'Confirm in Wallet...'
+                  : mintingState === 'minting'
+                  ? 'Minting...'
+                  : 'Mint Now'
+                }
+              </motion.button>
+              
+              {/* Status Messages */}
+              <div className="mt-4">
+                {renderMintingStatus()}
               </div>
             </div>
           </motion.div>

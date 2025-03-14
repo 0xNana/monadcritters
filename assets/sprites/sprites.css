@@ -1,0 +1,151 @@
+/* Base sprite styles */
+[class^="critter-"] {
+  background-repeat: no-repeat;
+  background-size: cover;
+  display: inline-block;
+}
+
+/* Sprite classes for different sizes and rarities */
+
+/* Common Critters */
+.critter-common-512 {
+  width: 512px;
+  height: 512px;
+  background-image: url('common-512.png');
+}
+
+.critter-common-256 {
+  width: 256px;
+  height: 256px;
+  background-image: url('common-256.png');
+}
+
+.critter-common-128 {
+  width: 128px;
+  height: 128px;
+  background-image: url('common-128.png');
+}
+
+.critter-common-64 {
+  width: 64px;
+  height: 64px;
+  background-image: url('common-64.png');
+}
+
+.critter-common-32 {
+  width: 32px;
+  height: 32px;
+  background-image: url('common-32.png');
+}
+
+/* Uncommon Critters */
+.critter-uncommon-512 {
+  width: 512px;
+  height: 512px;
+  background-image: url('uncommon-512.png');
+}
+
+.critter-uncommon-256 {
+  width: 256px;
+  height: 256px;
+  background-image: url('uncommon-256.png');
+}
+
+.critter-uncommon-128 {
+  width: 128px;
+  height: 128px;
+  background-image: url('uncommon-128.png');
+}
+
+.critter-uncommon-64 {
+  width: 64px;
+  height: 64px;
+  background-image: url('uncommon-64.png');
+}
+
+.critter-uncommon-32 {
+  width: 32px;
+  height: 32px;
+  background-image: url('uncommon-32.png');
+}
+
+/* Rare Critters */
+.critter-rare-512 {
+  width: 512px;
+  height: 512px;
+  background-image: url('rare-512.png');
+}
+
+.critter-rare-256 {
+  width: 256px;
+  height: 256px;
+  background-image: url('rare-256.png');
+}
+
+.critter-rare-128 {
+  width: 128px;
+  height: 128px;
+  background-image: url('rare-128.png');
+}
+
+.critter-rare-64 {
+  width: 64px;
+  height: 64px;
+  background-image: url('rare-64.png');
+}
+
+.critter-rare-32 {
+  width: 32px;
+  height: 32px;
+  background-image: url('rare-32.png');
+}
+
+/* Legendary Critters */
+.critter-legendary-512 {
+  width: 512px;
+  height: 512px;
+  background-image: url('legendary-512.png');
+}
+
+.critter-legendary-256 {
+  width: 256px;
+  height: 256px;
+  background-image: url('legendary-256.png');
+}
+
+.critter-legendary-128 {
+  width: 128px;
+  height: 128px;
+  background-image: url('legendary-128.png');
+}
+
+.critter-legendary-64 {
+  width: 64px;
+  height: 64px;
+  background-image: url('legendary-64.png');
+}
+
+.critter-legendary-32 {
+  width: 32px;
+  height: 32px;
+  background-image: url('legendary-32.png');
+}
+
+/* Hover effects */
+[class^="critter-"]:hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease-in-out;
+}
+
+/* Game state effects */
+.racing {
+  filter: brightness(1.2);
+}
+
+.speed-boost {
+  filter: drop-shadow(0 0 5px #00ff00);
+}
+
+.sabotaged {
+  filter: drop-shadow(0 0 5px #ff0000);
+} 

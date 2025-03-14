@@ -5,10 +5,10 @@ import { RaceSize } from '../../../contracts/CritterRace/types';
 import { useAccount, useWriteContract, useReadContract, useChainId } from 'wagmi';
 import { contracts } from '../../../utils/config';
 import { abi } from '../../../contracts/CritterRace/abi';
-import { CACHE_CONFIG } from '../../../utils/config';
 import { formatUnits } from 'ethers';
 import { useRaceContract } from '../hooks/useRaceState';
 import { motion } from 'framer-motion';
+import { debounce } from 'lodash';
 
 type RaceProgressStatus = 'ready' | 'racing' | 'complete';
 
@@ -73,6 +73,24 @@ const CACHE_KEYS = {
   RACE_INFO: (raceId: bigint) => `race_info_${raceId}`,
   RACE_RESULTS: (raceId: bigint) => `race_results_${raceId}`,
   RACE_STATS: (raceId: bigint) => `race_stats_${raceId}`
+};
+
+// Define local cache configuration
+const CACHE_CONFIG = {
+  DURATION: {
+    SHORT: 30_000,    // 30 seconds
+    MEDIUM: 60_000,   // 1 minute
+    LONG: 300_000     // 5 minutes
+  },
+  RETRY: {
+    MAX_ATTEMPTS: 5,
+    BASE_DELAY: 1000  // 1 second
+  },
+  PREFETCH: {
+    ENABLED: true,
+    INTERVAL: 1000
+  },
+  BATCH_SIZE: 10      // Move to root level
 };
 
 // Memory cache with improved typing
@@ -201,7 +219,7 @@ const prefetchManager = {
         // Process batch
         await Promise.all(keys.map(key => this.prefetchItem(key)));
       } catch (error) {
-        console.error('Prefetch error:', error);
+        console.error('Error processing batch:', error);
       }
 
       if (this.queue.size > 0) {
@@ -249,7 +267,7 @@ const formatTimeSpan = (date: Date | number | undefined) => {
 
 const RaceView: React.FC = () => {
   const navigate = useNavigate();
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const [selectedRaceSize, setSelectedRaceSize] = useState<RaceSize>(RaceSize.Two);
   const { data: activeRacesData, refetch: refetchActiveRaces } = useActiveRaces(selectedRaceSize);
@@ -278,17 +296,27 @@ const RaceView: React.FC = () => {
   const { writeContract: startRaceWrite } = useWriteContract();
   const { writeContract: endRaceWrite } = useWriteContract();
 
-  // Contract read function for race results
+  // Optimize race results fetching
   const { data: raceResults, refetch: refetchResults } = useReadContract({
     address: contracts.monad.race as `0x${string}`,
     abi: abi,
     functionName: 'getRaceInfo',
     args: processing ? [processing.raceId] : undefined,
     query: {
-      enabled: !!processing,
-      retryDelay: 5000,
-      refetchInterval: 10000,
-      refetchOnWindowFocus: false
+      enabled: !!processing && !processing.endingRaces.has(processing.raceId.toString()),
+      gcTime: CACHE_CONFIG.DURATION.MEDIUM,
+      staleTime: CACHE_CONFIG.DURATION.SHORT,
+      refetchInterval: CACHE_CONFIG.DURATION.SHORT,
+      retry: (failureCount, error: any) => {
+        if (!error?.message?.includes('429')) return false;
+        return failureCount < CACHE_CONFIG.RETRY.MAX_ATTEMPTS;
+      },
+      retryDelay: (failureCount) => {
+        return Math.min(
+          CACHE_CONFIG.RETRY.BASE_DELAY * Math.pow(2, failureCount - 1),
+          16000
+        );
+      }
     }
   });
 
@@ -319,99 +347,56 @@ const RaceView: React.FC = () => {
     }
   }, [selectedRace]);
 
-  // Memoized function to get race data with improved caching
+  // Add memory cache for race data
+  const raceDataCache = new Map<string, { 
+    data: any; 
+    timestamp: number;
+    accessCount: number;
+  }>();
+
+  // Optimize race data fetching with memory cache
   const getRaceData = useCallback(async (raceId: bigint) => {
-    const cacheKey = CACHE_KEYS.RACE_INFO(raceId);
+    const cacheKey = `race_${raceId.toString()}`;
+    const now = Date.now();
+    const cached = raceDataCache.get(cacheKey);
     
-    const cached = getFromCache<Race>(cacheKey);
-    if (cached) return cached;
+    // Use cached data if fresh
+    if (cached && now - cached.timestamp < CACHE_CONFIG.DURATION.SHORT) {
+      cached.accessCount++;
+      return cached.data;
+    }
 
-    const result = await refetchResults();
-    if (!result?.data) return null;
-
-    const raceData = convertContractRace(result.data);
-    setInCache(cacheKey, raceData);
-
-    // Prefetch related data
-    prefetchManager.add(CACHE_KEYS.RACE_STATS(raceId));
-    
-    return raceData;
-  }, [refetchResults]);
-
-  // Process race results with caching
-  const processRaceResults = useCallback(async (raceId: bigint) => {
     try {
-      setProcessing(prev => ({
-        ...prev,
-        raceId,
-        loading: true
-      }));
-      
-      const cacheKey = CACHE_KEYS.RACE_RESULTS(raceId);
-      
-      // Try memory cache first
-      const memCached = getFromCache<any>(cacheKey);
-      if (memCached) {
-        const updatedRace = await updateRaceResults(raceId, memCached);
-        if (updatedRace) setSelectedRace(updatedRace);
-        setProcessing(prev => ({ ...prev, loading: false }));
-        return;
-      }
-
-      // Try local storage cache
-      const cached = getFromCache<any>(cacheKey);
-      if (cached) {
-        const updatedRace = await updateRaceResults(raceId, cached);
-        if (updatedRace) setSelectedRace(updatedRace);
-        setInMemoryCache(cacheKey, cached);
-        setProcessing(prev => ({ ...prev, loading: false }));
-        return;
-      }
-
-      // Fetch new results
       const result = await refetchResults();
-      
-      if (result?.data) {
-        const raceInfo = result.data as {
-          id: bigint;
-          raceSize: number;
-          players: readonly `0x${string}`[];
-          critterIds: readonly bigint[];
-          startTime: bigint;
-          isActive: boolean;
-          hasEnded: boolean;
-          prizePool: bigint;
-          scores: readonly bigint[];  // Add scores from contract
-          rewards: readonly bigint[]; // Add rewards from contract
-        };
+      if (!result?.data) return null;
 
-        // Cache the results
-        setInCache(cacheKey, raceInfo);
-        setInMemoryCache(cacheKey, raceInfo);
-
-        const updatedRace = await updateRaceResults(raceId, raceInfo);
-        if (updatedRace) setSelectedRace(updatedRace);
-      }
+      const raceData = convertContractRace(result.data);
       
-      setProcessing(prev => ({ ...prev, loading: false }));
+      // Cache the new data
+      raceDataCache.set(cacheKey, { 
+        data: raceData, 
+        timestamp: now,
+        accessCount: 1
+      });
+      
+      return raceData;
     } catch (error) {
-      console.error('Failed to process race results:', error);
-      setProcessing(prev => ({ ...prev, loading: false }));
+      console.error('Error fetching race data:', error);
+      // Return cached data even if stale on error
+      return cached?.data || null;
     }
   }, [refetchResults]);
 
-  // Update updateRaceResults to use actual contract data
+  // Update race results function
   const updateRaceResults = useCallback((raceId: bigint, raceInfo: any) => {
     let updatedRace: Race | null = null;
     
     setRaces(prevRaces => {
       const newRaces = prevRaces.map(race => {
         if (race.id === raceId) {
-          // Get actual scores and rewards from contract data
           const scores = raceInfo.scores?.map((score: bigint) => Number(score)) || [];
           const rewards = raceInfo.rewards?.map((reward: bigint) => Number(formatUnits(reward, 18))) || [];
 
-          // Create array of player results with actual scores and rewards
           const playerResults = raceInfo.players.map((player: string, index: number) => ({
             wallet: player,
             score: scores[index] || 0,
@@ -419,7 +404,6 @@ const RaceView: React.FC = () => {
             isUser: player.toLowerCase() === address?.toLowerCase()
           }));
 
-          // Sort players by score to determine positions
           const sortedResults = [...playerResults]
             .sort((a, b) => b.score - a.score)
             .map((result, index) => ({
@@ -445,48 +429,51 @@ const RaceView: React.FC = () => {
     return updatedRace;
   }, [address]);
 
-  // Clean up expired cache entries with improved efficiency
+  // Add debouncedProcessRace after updateRaceResults
+  const debouncedProcessRace = useCallback(
+    debounce(async (raceId: bigint) => {
+      if (processing.endingRaces.has(raceId.toString())) return;
+      
+      try {
+        setProcessing(prev => ({
+          ...prev,
+          raceId,
+          loading: true
+        }));
+        
+        const raceData = await getRaceData(raceId);
+        if (raceData) {
+          const updatedRace = await updateRaceResults(raceId, raceData);
+          if (updatedRace) setSelectedRace(updatedRace);
+        }
+      } catch (error) {
+        console.error('Failed to process race results:', error);
+      } finally {
+        setProcessing(prev => ({ ...prev, loading: false }));
+      }
+    }, 1000),
+    [getRaceData, updateRaceResults]
+  );
+
+  // Clean up expired cache entries
   useEffect(() => {
     const cleanup = () => {
       const now = Date.now();
-
-      // Clean memory cache with access-based retention
-      for (const [key, value] of memoryCache.entries()) {
+      for (const [key, value] of raceDataCache.entries()) {
         const age = now - value.timestamp;
-        const timeSinceLastAccess = now - value.lastAccessed;
-
         // Keep frequently accessed items longer
         const shouldKeep = 
           (age <= CACHE_CONFIG.DURATION.LONG && value.accessCount > 10) ||
           (age <= CACHE_CONFIG.DURATION.MEDIUM && value.accessCount > 5) ||
           (age <= CACHE_CONFIG.DURATION.SHORT);
-
-        if (!shouldKeep || timeSinceLastAccess > CACHE_CONFIG.DURATION.LONG) {
-          memoryCache.delete(key);
+        
+        if (!shouldKeep) {
+          raceDataCache.delete(key);
         }
-      }
-
-      // Clean localStorage less frequently
-      if (Math.random() < 0.1) { // 10% chance to clean localStorage
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith('race_')) {
-            try {
-              const cached = localStorage.getItem(key);
-              if (cached) {
-                const { timestamp } = JSON.parse(cached);
-                if (now - timestamp > CACHE_CONFIG.DURATION.LONG) {
-                  localStorage.removeItem(key);
-                }
-              }
-            } catch {
-              localStorage.removeItem(key);
-            }
-          }
-        });
       }
     };
 
-    const interval = setInterval(cleanup, CACHE_CONFIG.DURATION.SHORT);
+    const interval = setInterval(cleanup, CACHE_CONFIG.DURATION.MEDIUM);
     return () => clearInterval(interval);
   }, []);
 
@@ -527,53 +514,15 @@ const RaceView: React.FC = () => {
     };
   };
 
-  // Update races with improved caching
-  useEffect(() => {
-    if (!activeRacesData) return;
-    
-    const cacheKey = CACHE_KEYS.ACTIVE_RACES(selectedRaceSize);
-    const cached = getFromCache<Race[]>(cacheKey);
-    
-    // Compare race IDs safely handling BigInt
-    const compareRaceIds = (a: Race[], b: NonNullable<typeof activeRacesData>) => {
-      if (a.length !== b.length) return false;
-      return a.every((race, index) => 
-        race.id.toString() === b[index].id.toString()
-      );
-    };
-    
-    // Only update if data has changed
-    const shouldUpdate = !cached || !compareRaceIds(cached, activeRacesData);
-    
-    if (shouldUpdate) {
-      const updatedRaces = activeRacesData.map(convertContractRace);
-      setRaces(updatedRaces);
-      setInCache(cacheKey, updatedRaces);
-      
-      // Batch prefetch first 3 races
-      updatedRaces.slice(0, 3).forEach(race => {
-        prefetchManager.add(CACHE_KEYS.RACE_INFO(race.id));
-        prefetchManager.add(CACHE_KEYS.RACE_STATS(race.id));
-      });
-    } else {
-      setRaces(cached);
-    }
-    
-    if (activeRacesData.length > 0) {
-      const firstRaceSize = activeRacesData[0].raceSize as RaceSize;
-      setSelectedRaceSize(firstRaceSize);
-    }
-  }, [activeRacesData, selectedRaceSize]);
-
-  // Handle race events
+  // Update useRaceEvents call to match the hook's signature
   useRaceEvents(
-    // RaceCreated
-    (raceId) => {
+    // Race Created handler
+    (raceId: bigint) => {
       console.log('Race created:', raceId);
       refetchActiveRaces();
     },
-    // PlayerJoined
-    (raceId, player, critterId) => {
+    // Player Joined handler
+    (raceId: bigint, player: `0x${string}`, critterId: bigint) => {
       console.log('Player joined:', { raceId, player, critterId });
       setRaces(prevRaces => 
         prevRaces.map(race => {
@@ -593,8 +542,8 @@ const RaceView: React.FC = () => {
         })
       );
     },
-    // RaceStarted
-    (raceId, startTime) => {
+    // Race Started handler
+    (raceId: bigint, startTime: bigint) => {
       console.log('Race started:', { raceId, startTime });
       setRaces(prevRaces => 
         prevRaces.map(race => {
@@ -611,11 +560,10 @@ const RaceView: React.FC = () => {
         })
       );
     },
-    // RaceEnded
-    (raceId, results) => {
+    // Race Ended handler
+    (raceId: bigint, results: any) => {
       console.log('Race ended:', { raceId, results });
-      // Process the race results when we receive the RaceEnded event
-      processRaceResults(raceId);
+      debouncedProcessRace(raceId);
     }
   );
 

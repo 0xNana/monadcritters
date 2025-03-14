@@ -8,6 +8,7 @@ import { MobileMenu } from './MobileMenu'
 import { useAccount } from 'wagmi'
 import React from 'react'
 
+
 type NavLinkProps = {
   to: string
   children: ReactNode
@@ -121,7 +122,44 @@ export function Layout({ children }: { children: ReactNode }) {
       </main>
 
       <footer className="py-8 px-4 text-center text-gray-400 text-sm border-t border-white/10">
-        <p>Built on Monad Testnet • High Performance L1 Blockchain</p>
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <img src="/monad-logo.svg" alt="Monad" className="w-5 h-5" />
+          <p>Built on Monad Testnet • High Performance L1 Blockchain</p>
+        </div>
+        <div className="flex items-center justify-center space-x-6">
+          <a
+            href="https://x.com/0xElegant"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            𝕏 Twitter
+          </a>
+          <a
+            href="https://t.me/Elegant_CF"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            Telegram
+          </a>
+          <a
+            href="https://github.com/0xNana"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            GitHub
+          </a>
+          <a
+            href="https://discord.com/users/0xElegant"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            Discord
+          </a>
+        </div>
       </footer>
 
       <MobileMenu

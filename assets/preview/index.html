@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MonadCritters Asset Preview</title>
+  <link rel="stylesheet" href="../sprites/sprites.css">
+  <style>
+    :root {
+      --primary: #6e3ff3;
+      --secondary: #4a2ba8;
+      --background: #1a1a1a;
+      --text: #ffffff;
+      --border: #333333;
+    }
+
+    body {
+      background: var(--background);
+      color: var(--text);
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      color: var(--primary);
+      margin-bottom: 10px;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+    }
+
+    .control-group {
+      background: var(--secondary);
+      padding: 15px;
+      border-radius: 8px;
+      min-width: 200px;
+    }
+
+    .control-group h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    select, button {
+      background: var(--background);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px;
+      border-radius: 4px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    button {
+      background: var(--primary);
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .preview-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .preview-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .preview-card h3 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+
+    .asset-container {
+      min-height: 512px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 20px 0;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+    }
+
+    .asset-container > div {
+      background-size: cover !important;
+    }
+
+    .stats {
+      text-align: left;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+
+    .stats p {
+      margin: 5px 0;
+      font-size: 14px;
+    }
+
+    .performance-data {
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+    }
+
+    .loading-time {
+      font-weight: bold;
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>MonadCritters Asset Preview</h1>
+    <p>Test and compare different asset formats and animations</p>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <h3>Rarity</h3>
+      <select id="rarity-select">
+        <option value="common">Common</option>
+        <option value="uncommon">Uncommon</option>
+        <option value="rare">Rare</option>
+        <option value="legendary">Legendary</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <h3>Size</h3>
+      <select id="size-select">
+        <option value="512">512px</option>
+        <option value="256">256px</option>
+        <option value="128">128px</option>
+        <option value="64">64px</option>
+        <option value="32">32px</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <h3>Format</h3>
+      <select id="format-select">
+        <option value="sprite">Sprite Sheet</option>
+        <option value="svg">Original SVG</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <h3>Animation</h3>
+      <button id="pause-btn">Pause Animation</button>
+      <button id="reset-btn">Reset Animation</button>
+    </div>
+  </div>
+
+  <div class="preview-container">
+    <div class="preview-card">
+      <h3>Asset Preview</h3>
+      <div class="asset-container" id="preview-asset"></div>
+      <div class="stats">
+        <p>Format: <span id="current-format">Sprite Sheet</span></p>
+        <p>File Size: <span id="file-size">Calculating...</span></p>
+        <p>Dimensions: <span id="dimensions">-</span></p>
+        <p>Animation Frames: <span id="frame-count">-</span></p>
+      </div>
+    </div>
+
+    <div class="preview-card">
+      <h3>Performance Metrics</h3>
+      <div class="performance-data">
+        <p>Initial Load Time: <span id="load-time" class="loading-time">-</span></p>
+        <p>Memory Usage: <span id="memory-usage">-</span></p>
+        <p>CPU Usage: <span id="cpu-usage">-</span></p>
+      </div>
+      <div id="performance-chart"></div>
+    </div>
+  </div>
+
+  <script>
+    const raritySelect = document.getElementById('rarity-select');
+    const sizeSelect = document.getElementById('size-select');
+    const formatSelect = document.getElementById('format-select');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const previewAsset = document.getElementById('preview-asset');
+    const currentFormat = document.getElementById('current-format');
+    const fileSize = document.getElementById('file-size');
+    const dimensions = document.getElementById('dimensions');
+    const frameCount = document.getElementById('frame-count');
+    const loadTime = document.getElementById('load-time');
+    const memoryUsage = document.getElementById('memory-usage');
+    const cpuUsage = document.getElementById('cpu-usage');
+
+    let isPaused = false;
+    let startTime;
+
+    function updatePreview() {
+      const rarity = raritySelect.value;
+      const size = sizeSelect.value;
+      const format = formatSelect.value;
+
+      startTime = performance.now();
+      previewAsset.innerHTML = '';
+
+      switch (format) {
+        case 'sprite':
+          const spriteElement = document.createElement('div');
+          spriteElement.className = `critter-${rarity}-${size}`;
+          previewAsset.appendChild(spriteElement);
+          currentFormat.textContent = 'Sprite Sheet (PNG)';
+          frameCount.textContent = rarity === 'common' ? '1' : 
+                                 rarity === 'uncommon' ? '4' :
+                                 rarity === 'rare' ? '6' : '8';
+          
+          // Load and display sprite sheet file size
+          fetch(`../sprites/${rarity}-${size}.png`)
+            .then(response => {
+              const size = response.headers.get('content-length');
+              fileSize.textContent = size ? `${(size / 1024).toFixed(2)} KB` : 'N/A';
+            })
+            .catch((error) => {
+              console.error('Error loading sprite:', error);
+              fileSize.textContent = 'N/A';
+            });
+          break;
+
+        case 'svg':
+          // First try to load the base mascot
+          fetch('../monadmascot.svg')
+            .then(response => response.text())
+            .then(baseSvg => {
+              console.log('Base SVG loaded successfully');
+              // Then load the rarity-specific SVG
+              return fetch(`../mascot/${rarity}/${size}/mascot.svg`)
+                .then(response => response.text())
+                .then(svg => {
+                  console.log('Rarity SVG loaded successfully');
+                  previewAsset.innerHTML = svg;
+                  const svgElement = previewAsset.querySelector('svg');
+                  if (svgElement) {
+                    svgElement.style.width = '100%';
+                    svgElement.style.height = '100%';
+                  }
+                  currentFormat.textContent = 'Original SVG';
+                  frameCount.textContent = '1 (animated via SMIL)';
+                  return fetch(`../mascot/${rarity}/${size}/mascot.svg`);
+                });
+            })
+            .then(response => {
+              const size = response.headers.get('content-length');
+              fileSize.textContent = size ? `${(size / 1024).toFixed(2)} KB` : 'N/A';
+            })
+            .catch((error) => {
+              console.error('Error loading SVG:', error);
+              fileSize.textContent = 'N/A';
+            });
+          break;
+      }
+
+      dimensions.textContent = `${size}x${size}px`;
+
+      // Update performance metrics
+      const loadingTime = performance.now() - startTime;
+      loadTime.textContent = `${loadingTime.toFixed(2)}ms`;
+      
+      // Simulate memory and CPU usage for demo
+      memoryUsage.textContent = `${(Math.random() * 5 + 2).toFixed(1)} MB`;
+      cpuUsage.textContent = `${(Math.random() * 2 + 1).toFixed(1)}%`;
+    }
+
+    function toggleAnimation() {
+      const element = previewAsset.children[0];
+      if (element) {
+        if (isPaused) {
+          element.style.animationPlayState = 'running';
+          pauseBtn.textContent = 'Pause Animation';
+        } else {
+          element.style.animationPlayState = 'paused';
+          pauseBtn.textContent = 'Resume Animation';
+        }
+        isPaused = !isPaused;
+      }
+    }
+
+    function resetAnimation() {
+      const element = previewAsset.children[0];
+      if (element) {
+        element.style.animation = 'none';
+        element.offsetHeight; // Trigger reflow
+        element.style.animation = null;
+      }
+    }
+
+    raritySelect.addEventListener('change', updatePreview);
+    sizeSelect.addEventListener('change', updatePreview);
+    formatSelect.addEventListener('change', updatePreview);
+    pauseBtn.addEventListener('click', toggleAnimation);
+    resetBtn.addEventListener('click', resetAnimation);
+
+    // Initial preview
+    updatePreview();
+  </script>
+</body>
+</html> 

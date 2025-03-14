@@ -27,5 +27,11 @@
     "env": {
       "NODE_VERSION": "18.19.1"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 } 
