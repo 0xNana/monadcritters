@@ -43,35 +43,27 @@ createAppKit({
 })
 
 type WalletContextType = {
-  address: string | undefined
+  address?: string
   isConnected: boolean
+  isConnecting: boolean
   connect: () => Promise<void>
   disconnect: () => Promise<void>
-  isConnecting: boolean
 }
 
 const WalletContext = createContext<WalletContextType>({
-  address: undefined,
   isConnected: false,
+  isConnecting: false,
   connect: async () => {},
   disconnect: async () => {},
-  isConnecting: false,
 })
 
-// Export the hook as a named function declaration
-export function useWallet() {
-  const context = useContext(WalletContext)
-  if (!context) {
-    throw new Error('useWallet must be used within a WalletProvider')
-  }
-  return context
-}
+export const useWallet = () => useContext(WalletContext)
 
 function WalletProviderInner({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string>()
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
-  const { open: openAppKit } = useAppKit()
+  const appKit = useAppKit()
 
   useEffect(() => {
     // Initial account state
@@ -93,7 +85,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   const connect = async () => {
     try {
       setIsConnecting(true)
-      await openAppKit()
+      await appKit.open()
     } catch (error) {
       console.error('Failed to connect wallet:', error)
     } finally {
@@ -104,6 +96,9 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   const disconnect = async () => {
     try {
       await wagmiDisconnect(config)
+      await appKit.close()
+      setAddress(undefined)
+      setIsConnected(false)
     } catch (error) {
       console.error('Failed to disconnect wallet:', error)
     }

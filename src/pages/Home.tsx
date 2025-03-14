@@ -1,10 +1,20 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
+import { useWallet } from '../components/WalletProvider';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { address } = useAccount();
+  const { connect } = useWallet();
+
+  const handleAction = async () => {
+    if (address) {
+      navigate('/mint');
+    } else {
+      await connect();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900">
@@ -30,17 +40,19 @@ const Home: React.FC = () => {
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <button
-                onClick={() => navigate('/mint')}
+                onClick={() => address ? navigate('/mint') : connect()}
                 className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-lg transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-purple-500/25"
               >
-                Mint Your Critter
+                {address ? 'Mint Your Critter' : 'Log In to Begin'}
               </button>
-              <button
-                onClick={() => navigate('/race')}
-                className="px-8 py-4 bg-gradient-to-r from-gray-800 to-gray-700 hover:from-gray-700 hover:to-gray-600 text-white font-bold rounded-lg transform hover:scale-105 transition-all duration-200"
-              >
-                View Active Races
-              </button>
+              {address && (
+                <button
+                  onClick={() => navigate('/race')}
+                  className="px-8 py-4 bg-gradient-to-r from-gray-800 to-gray-700 hover:from-gray-700 hover:to-gray-600 text-white font-bold rounded-lg transform hover:scale-105 transition-all duration-200"
+                >
+                  View Active Races
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -122,10 +134,10 @@ const Home: React.FC = () => {
             Start your racing journey today. Mint your first Critter and compete for glory on the Monad network.
           </p>
           <button
-            onClick={() => navigate(address ? '/mint' : '/connect')}
+            onClick={handleAction}
             className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-lg transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-purple-500/25"
           >
-            {address ? 'Start Racing Now' : 'Connect Wallet to Begin'}
+            {address ? 'Start Racing Now' : 'Log In to Begin'}
           </button>
         </div>
       </div>
