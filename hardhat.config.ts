@@ -18,7 +18,7 @@ const config: HardhatUserConfig = {
     },
     networks: {
         monadTestnet: {
-            url: process.env.MONAD_TESTNET_URL || "https://monad-testnet.g.alchemy.com/v2/hY0NsgQ0IOdf9Wc3z-eC4a5Nesxuwi4_",
+            url: "https://testnet-rpc.monad.xyz",
             accounts: process.env.MONAD_TESTNET_PRIVATE_KEY ? [process.env.MONAD_TESTNET_PRIVATE_KEY] : [],
             chainId: 10143,
             gasPrice: 1000000000000,
@@ -59,20 +59,7 @@ const config: HardhatUserConfig = {
         browserUrl: "https://testnet.monadexplorer.com",
     },
     etherscan: {
-        apiKey: {
-            sepolia: process.env.ETHERSCAN_API_KEY || "",
-            monadTestnet: "no-api-key-needed"
-        },
-        customChains: [
-            {
-                network: "monadTestnet",
-                chainId: 10143,
-                urls: {
-                    apiURL: "https://testnet.monadexplorer.com/api",
-                    browserURL: "https://testnet.monadexplorer.com"
-                }
-            }
-        ]
+        enabled: false
     }
 };
 

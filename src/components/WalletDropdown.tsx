@@ -63,7 +63,7 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
                   </div>
                   <div className="text-lg font-semibold text-white">{truncatedAddress}</div>
                   <div className="text-sm text-gray-400">
-                    {balance ? `${Number(balance.formatted).toFixed(3)} ${balance.symbol}` : '0 ETH'}
+                    {balance ? `${Number(balance.formatted).toFixed(3)} ${balance.symbol}` : '0 MON'}
                   </div>
                 </div>
 
