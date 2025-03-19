@@ -2,18 +2,27 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 
-contract MonadCritter is ERC721, Ownable, Pausable {
+contract MonadCritter is ERC721Enumerable, Ownable, Pausable {
     using Strings for uint256;
+
+    // Define Rarity enum
+    enum Rarity {
+        Common,     // 0
+        Uncommon,   // 1
+        Rare,      // 2
+        Legendary  // 3
+    }
 
     // All prices are in MON (Monad's native token)
     // 1 MON = 1e18 (18 decimals)
     uint256 public mintPrice = 0.01 * 1e18; // 0.01 MON
-    uint256 public totalSupply;
+    uint256 private _tokenCount;  // Renamed from totalSupply
     
     // Maximum mints per wallet
     uint256 public constant MAX_MINTS_PER_WALLET = 4;
@@ -34,7 +43,7 @@ contract MonadCritter is ERC721, Ownable, Pausable {
         uint8 speed;
         uint8 stamina;
         uint8 luck;
-        uint8 rarity; // 0: Common, 1: Uncommon, 2: Rare, 3: Legendary
+        Rarity rarity;
     }
 
     mapping(uint256 => Stats) public tokenStats;
@@ -51,12 +60,12 @@ contract MonadCritter is ERC721, Ownable, Pausable {
         require(msg.value >= mintPrice, "Insufficient MON sent");
         require(mintsPerWallet[msg.sender] < MAX_MINTS_PER_WALLET, "Exceeded max mints per wallet");
 
-        uint256 tokenId = totalSupply + 1;
+        uint256 tokenId = _tokenCount + 1;
         Stats memory stats = generateStats();
         
         _safeMint(msg.sender, tokenId);
         tokenStats[tokenId] = stats;
-        totalSupply++;
+        _tokenCount++;
         mintsPerWallet[msg.sender]++;
 
         // Refund excess MON if any
@@ -73,12 +82,12 @@ contract MonadCritter is ERC721, Ownable, Pausable {
         require(amount > 0, "Amount must be greater than 0");
         
         for (uint256 i = 0; i < amount; i++) {
-            uint256 tokenId = totalSupply + 1;
+            uint256 tokenId = _tokenCount + 1;
             Stats memory stats = generateStats();
             
             _safeMint(to, tokenId);
             tokenStats[tokenId] = stats;
-            totalSupply++;
+            _tokenCount++;
             
             emit CritterMinted(tokenId, to, stats);
         }
@@ -90,16 +99,16 @@ contract MonadCritter is ERC721, Ownable, Pausable {
             block.timestamp,
             block.prevrandao,
             msg.sender,
-            totalSupply
+            _tokenCount
         )));
 
         // Determine rarity (70/20/9/1 distribution)
-        uint8 rarity;
+        Rarity rarity;
         uint256 rarityRoll = rand % 100;
-        if (rarityRoll < 70) rarity = 0; // Common
-        else if (rarityRoll < 90) rarity = 1; // Uncommon
-        else if (rarityRoll < 99) rarity = 2; // Rare
-        else rarity = 3; // Legendary
+        if (rarityRoll < 70) rarity = Rarity.Common;
+        else if (rarityRoll < 90) rarity = Rarity.Uncommon;
+        else if (rarityRoll < 99) rarity = Rarity.Rare;
+        else rarity = Rarity.Legendary;
 
         // Generate base stats (1-100)
         uint8 speed = uint8(((rand >> 8) % 60) + 40); // 40-100
@@ -107,21 +116,21 @@ contract MonadCritter is ERC721, Ownable, Pausable {
         uint8 luck = uint8(((rand >> 24) % 60) + 40); // 40-100
 
         // Apply rarity boosts
-        if (rarity == 1) { // Uncommon: +10%
+        if (rarity == Rarity.Uncommon) { // Uncommon: +10%
             uint256 boostedSpeed = uint256(speed) * 110 / 100;
             uint256 boostedStamina = uint256(stamina) * 110 / 100;
             uint256 boostedLuck = uint256(luck) * 110 / 100;
             speed = uint8(boostedSpeed > 255 ? 255 : boostedSpeed);
             stamina = uint8(boostedStamina > 255 ? 255 : boostedStamina);
             luck = uint8(boostedLuck > 255 ? 255 : boostedLuck);
-        } else if (rarity == 2) { // Rare: +25%
+        } else if (rarity == Rarity.Rare) { // Rare: +25%
             uint256 boostedSpeed = uint256(speed) * 125 / 100;
             uint256 boostedStamina = uint256(stamina) * 125 / 100;
             uint256 boostedLuck = uint256(luck) * 125 / 100;
             speed = uint8(boostedSpeed > 255 ? 255 : boostedSpeed);
             stamina = uint8(boostedStamina > 255 ? 255 : boostedStamina);
             luck = uint8(boostedLuck > 255 ? 255 : boostedLuck);
-        } else if (rarity == 3) { // Legendary: +50%
+        } else if (rarity == Rarity.Legendary) { // Legendary: +50%
             uint256 boostedSpeed = uint256(speed) * 150 / 100;
             uint256 boostedStamina = uint256(stamina) * 150 / 100;
             uint256 boostedLuck = uint256(luck) * 150 / 100;
@@ -153,7 +162,7 @@ contract MonadCritter is ERC721, Ownable, Pausable {
     }
     
     function _buildTokenJSON(uint256 tokenId, Stats memory stats) internal view returns (bytes memory) {
-        string memory rarityName = rarityNames[stats.rarity];
+        string memory rarityName = rarityNames[uint8(stats.rarity)];
         string memory rarityLower = toLower(rarityName);
         
         // Part 1: Basic metadata
@@ -225,13 +234,64 @@ contract MonadCritter is ERC721, Ownable, Pausable {
         (bool success, ) = msg.sender.call{value: balance}("");
         require(success, "MON transfer failed");
     }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Enumerable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+
+    // Helper function to get all tokens owned by an address
+    function getTokensOfOwner(address owner) external view returns (uint256[] memory) {
+        uint256 tokenCount = balanceOf(owner);
+        uint256[] memory tokens = new uint256[](tokenCount);
+        
+        for(uint256 i = 0; i < tokenCount; i++) {
+            tokens[i] = tokenOfOwnerByIndex(owner, i);
+        }
+        
+        return tokens;
+    }
+
+    // Helper function to get all tokens with their stats
+    function getAllTokensWithStats(uint256 startIndex, uint256 endIndex) 
+        external 
+        view 
+        returns (uint256[] memory tokenIds, Stats[] memory tokenStats_) 
+    {
+        require(startIndex < endIndex, "Invalid range");
+        require(endIndex <= _tokenCount, "End index out of bounds");
+        
+        uint256 size = endIndex - startIndex;
+        tokenIds = new uint256[](size);
+        tokenStats_ = new Stats[](size);
+        
+        for(uint256 i = 0; i < size; i++) {
+            uint256 tokenId = tokenByIndex(startIndex + i);
+            tokenIds[i] = tokenId;
+            tokenStats_[i] = tokenStats[tokenId];
+        }
+        
+        return (tokenIds, tokenStats_);
+    }
 }
 
 interface IMonadCritter {
+    enum Rarity {
+        Common,
+        Uncommon,
+        Rare,
+        Legendary
+    }
+
     struct Stats {
-        uint256 speed;
-        uint256 stamina;
-        uint256 luck;
+        uint8 speed;
+        uint8 stamina;
+        uint8 luck;
+        Rarity rarity;
     }
 
     function getStats(uint256 tokenId) external view returns (Stats memory);

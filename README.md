@@ -76,14 +76,24 @@ Track your performance with detailed statistics:
 
 ## Development
 
+### Prerequisites
+
+- Node.js (v16+)
+- npm or yarn
+
+### Installation
+
 ```bash
 # Install dependencies
 npm install
 
-# Run development server
+# Start development server
 npm run dev
+```
 
-# Build for production
+### Building for Production
+
+```bash
 npm run build
 ```
 
@@ -96,8 +106,30 @@ npm run build
 
 ## License
 
-MIT License
+[MIT](LICENSE)
 
 ---
 
 Built with ❤️ for the Monad ecosystem 
+
+## Wallet Connection Information
+
+### Supported Wallet Types
+
+Currently, MonadCritters supports the following wallet connection methods:
+
+- MetaMask
+- Other injected wallets (Brave, etc.)
+- WalletConnect (for supported chains)
+
+### Known Limitations
+
+**Social/Email Logins**: Social and email logins are currently disabled because WalletConnect's Cloud infrastructure does not yet officially support Monad testnet (chainId 10143). This is a limitation of the WalletConnect platform, not of the MonadCritters application.
+
+When WalletConnect adds official support for Monad testnet, we will re-enable these login options.
+
+### Connecting Your Wallet
+
+1. Click the "Log In" button in the top right corner
+2. Select your preferred wallet from the options
+3. Follow the prompts to connect your wallet to the application 

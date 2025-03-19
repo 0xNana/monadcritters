@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDeployContract, usePublicClient, useSignMessage, useAccount, useWalletClient } from 'wagmi';
 import { parseEther } from 'viem';
 import { toast } from 'react-hot-toast';
@@ -7,12 +7,9 @@ import { abi as RACE_ABI } from '../../../contracts/CritterRace/abi';
 import { contracts } from '../../../utils/config';
 import { useChainId } from 'wagmi';
 
-// Get contract address based on chain ID
+// Get contract address
 function useContractAddress() {
-  const chainId = useChainId();
-  return chainId === 11155111 
-    ? contracts.sepolia.race 
-    : contracts.monad.race;
+  return contracts.monad.race;
 }
 
 // Base contract hook
@@ -45,124 +42,225 @@ export const useRaceContract = () => {
   return { contract, wrapWithErrorHandler };
 };
 
+// Update constants
+const RACE_DATA_CACHE_KEY = 'race_data_cache';
+const RACE_DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const FETCH_DEBOUNCE_DELAY = 15000; // 15 seconds debounce
+const POLLING_INTERVAL = 30000; // 30 seconds polling
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000;
+
+interface RaceDataCache {
+  timestamp: number;
+  data: RaceInfo[];
+  lastFetchedBlock: bigint;
+}
+
+// Add type for raw race data
+interface RawRaceData {
+  id: bigint;
+  raceSize: number;
+  players: readonly `0x${string}`[];
+  critterIds: readonly bigint[];
+  startTime: bigint;
+  isActive: boolean;
+  hasEnded: boolean;
+  prizePool: bigint;
+}
+
 // Race data hook
 export const useRaceData = () => {
   const { contract } = useRaceContract();
   const publicClient = usePublicClient();
   const [races, setRaces] = useState<RaceInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const lastFetchRef = useRef<number>(0);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchRaces = async () => {
+  const fetchRaces = useCallback(async (force = false) => {
     if (!publicClient) return;
-    
+
+    const now = Date.now();
+    if (!force && now - lastFetchRef.current < FETCH_DEBOUNCE_DELAY) {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+      fetchTimeoutRef.current = setTimeout(() => fetchRaces(true), FETCH_DEBOUNCE_DELAY);
+      return;
+    }
+
     try {
       setLoading(true);
-      const allRaces = await Promise.all(
-        [RaceSize.Two, RaceSize.Five, RaceSize.Ten].map(async (size) => {
+      lastFetchRef.current = now;
+
+      // Try to get from cache first
+      const cached = localStorage.getItem(RACE_DATA_CACHE_KEY);
+      if (cached && !force) {
+        try {
+          const parsedCache = JSON.parse(cached, (key, value) => {
+            if (typeof value === 'string' && /^\d+$/.test(value)) {
+              try {
+                return BigInt(value);
+              } catch {
+                return value;
+              }
+            }
+            return value;
+          }) as RaceDataCache;
+
+          if (Date.now() - parsedCache.timestamp < RACE_DATA_CACHE_DURATION) {
+            setRaces(parsedCache.data);
+            setLoading(false);
+            // Schedule a background refresh if cache is older than half its duration
+            if (Date.now() - parsedCache.timestamp > RACE_DATA_CACHE_DURATION / 2) {
+              setTimeout(() => fetchRaces(true), 1000);
+            }
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing cache:', error);
+        }
+      }
+
+      // Fetch races for each size sequentially to ensure proper data format
+      const allRaces: RawRaceData[] = [];
+      for (const size of [RaceSize.Two, RaceSize.Five, RaceSize.Ten]) {
+        try {
           const result = await publicClient.readContract({
             ...contract,
             functionName: 'getActiveRaces',
             args: [size]
-          });
-          return result;
-        })
-      );
+          }) as RawRaceData[];
+          
+          if (Array.isArray(result)) {
+            allRaces.push(...result);
+          }
+        } catch (error: any) {
+          console.error(`Error fetching races for size ${size}:`, error);
+          // Don't break the loop on error, continue with other sizes
+          if (error?.message?.includes('429') || error?.message?.includes('400')) {
+            // Wait before trying next size
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
 
-      const formattedRaces = allRaces.flat().map(race => ({
-        id: race.id,
-        raceSize: race.raceSize as RaceSize,
-        playerCount: BigInt(race.players.length),
-        players: [...race.players],
-        critterIds: [...race.critterIds],
-        startTime: race.startTime,
-        isActive: race.isActive,
-        hasEnded: race.hasEnded,
-        prizePool: race.prizePool
-      }));
+      const formattedRaces = allRaces
+        .filter((race): race is RawRaceData => Boolean(race && race.id)) // Type guard to ensure valid races
+        .map(race => ({
+          id: race.id,
+          raceSize: race.raceSize as RaceSize,
+          playerCount: BigInt(race.players.length),
+          players: [...race.players],
+          critterIds: [...race.critterIds],
+          startTime: race.startTime,
+          isActive: race.isActive,
+          hasEnded: race.hasEnded,
+          prizePool: race.prizePool
+        }));
 
-      setRaces(formattedRaces);
-    } catch (error) {
+      if (formattedRaces.length > 0) {
+        setRaces(formattedRaces);
+        setRetryCount(0);
+
+        // Cache the results
+        try {
+          const cache: RaceDataCache = {
+            timestamp: Date.now(),
+            data: formattedRaces,
+            lastFetchedBlock: await publicClient.getBlockNumber()
+          };
+          const serializedCache = JSON.stringify(cache, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value
+          );
+          localStorage.setItem(RACE_DATA_CACHE_KEY, serializedCache);
+        } catch (error) {
+          console.error('Error caching race data:', error);
+        }
+      } else if (cached) {
+        // If no new data but we have cache, keep using it
+        const parsedCache = JSON.parse(cached, (key, value) => {
+          if (typeof value === 'string' && /^\d+$/.test(value)) {
+            try {
+              return BigInt(value);
+            } catch {
+              return value;
+            }
+          }
+          return value;
+        }) as RaceDataCache;
+        setRaces(parsedCache.data);
+      }
+
+    } catch (error: any) {
       console.error('Error fetching races:', error);
-      toast.error('Failed to fetch races');
+      // Handle rate limiting with exponential backoff
+      if (error?.message?.includes('429') || error?.message?.includes('400')) {
+        const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
+        if (retryCount < MAX_RETRIES) {
+          setRetryCount(prev => prev + 1);
+          setTimeout(() => fetchRaces(true), retryDelay);
+        } else {
+          toast.error('Too many requests. Please try again later.');
+        }
+      } else {
+        toast.error('Failed to fetch races. Using cached data if available.');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [contract, publicClient, retryCount]);
 
   useEffect(() => {
     if (!publicClient) return;
     
     fetchRaces();
 
-    // Set up event listeners for race updates
-    const eventNames = ['RaceCreated', 'PlayerJoined', 'RaceStarted', 'RaceEnded'] as const;
-    
-    const unwatch = eventNames.map(eventName => 
-      publicClient.watchContractEvent({
-        ...contract,
-        eventName,
-        onLogs: fetchRaces
-      })
-    );
+    // Set up polling interval
+    const pollInterval = setInterval(() => {
+      const now = Date.now();
+      if (now - lastFetchRef.current >= FETCH_DEBOUNCE_DELAY) {
+        fetchRaces(true);
+      }
+    }, POLLING_INTERVAL);
 
+    // Single event handler for all events
+    const unwatch = publicClient.watchContractEvent({
+      ...contract,
+      eventName: 'RaceEnded', // Only watch for race end events
+      onLogs: () => {
+        const now = Date.now();
+        if (now - lastFetchRef.current >= FETCH_DEBOUNCE_DELAY) {
+          fetchRaces(true);
+        }
+      }
+    });
+
+    // Cleanup
     return () => {
-      unwatch.forEach(unwatchFn => unwatchFn());
+      clearInterval(pollInterval);
+      unwatch();
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
     };
-  }, [contract, publicClient]);
+  }, [contract, publicClient, fetchRaces]);
 
-  return { races, loading, refreshRaces: fetchRaces };
+  return { races, loading, refreshRaces: () => fetchRaces(true) };
 };
 
 // Race actions hook
 export const useRaceActions = () => {
-  const { contract, wrapWithErrorHandler } = useRaceContract();
-  const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
   const [processing, setProcessing] = useState(false);
+  const { contract, wrapWithErrorHandler } = useRaceContract();
+  const { data: walletClient } = useWalletClient();
 
-  const createRace = async (size: RaceSize) => {
-    if (!walletClient) throw new Error('Wallet not connected');
+  const startRace = useCallback(async (raceId: number) => {
+    if (!walletClient || !contract) throw new Error('Contract not initialized');
     
-    return wrapWithErrorHandler(
-      walletClient.writeContract({
-        ...contract,
-        functionName: 'createRace',
-        args: [Number(size)]
-      }),
-      'Creating new race...'
-    );
-  };
-
-  const joinRace = async (
-    raceId: number,
-    raceSize: RaceSize,
-    critterId: number,
-    boostAmount: number = 0
-  ) => {
-    if (!walletClient || !publicClient) throw new Error('Wallet not connected');
-
-    const raceTypeInfo = await publicClient.readContract({
-      ...contract,
-      functionName: 'getRaceTypeInfo',
-      args: [raceSize]
-    });
-
-    return wrapWithErrorHandler(
-      walletClient.writeContract({
-        ...contract,
-        functionName: 'joinRace',
-        args: [BigInt(raceId), BigInt(Number(raceSize)), BigInt(critterId), BigInt(boostAmount)],
-        value: raceTypeInfo.entryFee
-      }),
-      'Joining race...'
-    );
-  };
-
-  const startRace = async (raceId: number) => {
-    if (!walletClient) throw new Error('Wallet not connected');
-    
-    setProcessing(true);
     try {
+      setProcessing(true);
       await wrapWithErrorHandler(
         walletClient.writeContract({
           ...contract,
@@ -174,13 +272,13 @@ export const useRaceActions = () => {
     } finally {
       setProcessing(false);
     }
-  };
+  }, [walletClient, contract, wrapWithErrorHandler]);
 
-  const endRace = async (raceId: number) => {
-    if (!walletClient) throw new Error('Wallet not connected');
+  const endRace = useCallback(async (raceId: number) => {
+    if (!walletClient || !contract) throw new Error('Contract not initialized');
     
-    setProcessing(true);
     try {
+      setProcessing(true);
       await wrapWithErrorHandler(
         walletClient.writeContract({
           ...contract,
@@ -192,9 +290,13 @@ export const useRaceActions = () => {
     } finally {
       setProcessing(false);
     }
-  };
+  }, [walletClient, contract, wrapWithErrorHandler]);
 
-  return { createRace, joinRace, startRace, endRace, processing };
+  return {
+    startRace,
+    endRace,
+    processing
+  };
 };
 
 // Power-ups hook

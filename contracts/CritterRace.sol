@@ -143,6 +143,17 @@ contract CritterRace is Ownable, Pausable {
     // Add mapping after other mappings
     mapping(uint256 => RaceEndInfo) public raceEndInfo;
 
+    // Add score cache mapping
+    mapping(uint256 => uint256) public baseScoreCache;  // critterId => baseScore
+    
+    // Add LeaderboardEntry struct
+    struct LeaderboardEntry {
+        address player;
+        uint256 position;
+        uint256 score;
+        uint256 reward;
+    }
+
     constructor(address _critterContract) {
         critterContract = MonadCritter(_critterContract);
         _transferOwnership(msg.sender);
@@ -416,11 +427,32 @@ contract CritterRace is Ownable, Pausable {
         require(!race.hasEnded, "Race already ended");
         require(isParticipating[raceId][msg.sender], "Only race participants can end");
         
-        // Just distribute the pre-calculated rewards and mark race as ended
+        // Ensure we have results to work with
+        require(race.calculatedResults.length > 0, "No calculated results found");
+        
+        // First, sync the results to raceEndInfo
+        RaceEndInfo storage endInfo = raceEndInfo[raceId];
+        endInfo.endTime = block.timestamp;
+        endInfo.resultsCalculated = true;
+        
+        // Copy all results to raceEndInfo
+        uint256 resultCount = race.calculatedResults.length;
+        for (uint256 i = 0; i < resultCount; i++) {
+            RaceResult memory result = race.calculatedResults[i];
+            endInfo.results.push(result);
+        }
+        
+        // Mark race as ended and distribute rewards
         race.hasEnded = true;
+        race.isActive = false;  // Set isActive to false when race ends
         _distributeStoredRewards(raceId);
         
-        emit RaceEnded(raceId, raceEndInfo[raceId].results);
+        // Update the rewards in raceEndInfo after distribution
+        for (uint256 i = 0; i < resultCount; i++) {
+            endInfo.results[i].reward = race.calculatedResults[i].reward;
+        }
+        
+        emit RaceEnded(raceId, endInfo.results);
     }
 
     function _calculateRaceResults(uint256 raceId) internal {
@@ -799,5 +831,139 @@ contract CritterRace is Ownable, Pausable {
         }
 
         return (topPlayers, scores);
+    }
+
+    // Add batch score fetching
+    function getBatchRaceScores(
+        uint256[] calldata critterIds,
+        uint256[] calldata boosts
+    ) external view returns (uint256[] memory scores) {
+        require(critterIds.length == boosts.length, "Array lengths must match");
+        scores = new uint256[](critterIds.length);
+        
+        for(uint256 i = 0; i < critterIds.length; i++) {
+            uint256 baseScore = baseScoreCache[critterIds[i]];
+            if (baseScore == 0) {
+                // Calculate and cache if not exists
+                MonadCritter.Stats memory stats = critterContract.getStats(critterIds[i]);
+                baseScore = _calculateBaseScore(stats);
+                // Note: Can't actually cache in view function, would need separate tx
+            }
+            scores[i] = _applyBoosts(baseScore, boosts[i]);
+        }
+        return scores;
+    }
+    
+    // Split score calculation into base and boost parts
+    function _calculateBaseScore(
+        MonadCritter.Stats memory stats
+    ) internal pure returns (uint256) {
+        uint256[4] memory rarityMultipliers = [uint256(100), 110, 125, 150];
+        uint256 rarityMultiplier = rarityMultipliers[uint256(stats.rarity)];
+        
+        uint256 speedWeight = 120;
+        uint256 luckWeight = 80;
+        
+        uint256 speed = uint256(stats.speed);
+        uint256 stamina = uint256(stats.stamina);
+        uint256 luck = uint256(stats.luck);
+        
+        uint256 weightedSpeed = (speed * speedWeight) / 100;
+        uint256 weightedStamina = stamina;
+        uint256 weightedLuck = (luck * luckWeight) / 100;
+        
+        uint256 baseScore = (weightedSpeed * weightedStamina * weightedLuck) / 10000;
+        
+        uint256 luckVariance = 100 + ((luck * 4) / 255) - 2;
+        baseScore = (baseScore * luckVariance) / 100;
+        
+        return (baseScore * rarityMultiplier) / 100 * 100;
+    }
+    
+    function _applyBoosts(uint256 baseScore, uint256 boosts) internal pure returns (uint256) {
+        if (boosts > 0) {
+            baseScore = (baseScore * 120) / 100;  // First boost: +20%
+            if (boosts > 1) {
+                baseScore = (baseScore * 115) / 100;  // Second boost: +15%
+            }
+        }
+        return baseScore;
+    }
+    
+    // Add function to pre-calculate and cache base scores
+    function cacheBaseScores(uint256[] calldata critterIds) external {
+        for(uint256 i = 0; i < critterIds.length; i++) {
+            MonadCritter.Stats memory stats = critterContract.getStats(critterIds[i]);
+            baseScoreCache[critterIds[i]] = _calculateBaseScore(stats);
+        }
+    }
+
+    // Add getter for multiple race results at once
+    function getBatchRaceResults(uint256[] calldata raceIds) external view returns (
+        RaceResult[][] memory results
+    ) {
+        results = new RaceResult[][](raceIds.length);
+        for(uint256 i = 0; i < raceIds.length; i++) {
+            results[i] = raceEndInfo[raceIds[i]].results;
+        }
+        return results;
+    }
+
+    // Add comprehensive leaderboard function
+    function getRaceLeaderboard(uint256 raceId) external view returns (LeaderboardEntry[] memory) {
+        RaceEndInfo storage endInfo = raceEndInfo[raceId];
+        require(endInfo.resultsCalculated, "Race results not calculated yet");
+        
+        RaceResult[] storage results = endInfo.results;
+        LeaderboardEntry[] memory leaderboard = new LeaderboardEntry[](results.length);
+        
+        // Convert results to leaderboard entries
+        for(uint256 i = 0; i < results.length; i++) {
+            leaderboard[i] = LeaderboardEntry({
+                player: results[i].player,
+                position: results[i].finalPosition,
+                score: results[i].score,
+                reward: results[i].reward
+            });
+        }
+        
+        // Sort by position (already sorted, but ensure it's correct)
+        for(uint256 i = 0; i < leaderboard.length - 1; i++) {
+            for(uint256 j = 0; j < leaderboard.length - i - 1; j++) {
+                if(leaderboard[j].position > leaderboard[j + 1].position) {
+                    LeaderboardEntry memory temp = leaderboard[j];
+                    leaderboard[j] = leaderboard[j + 1];
+                    leaderboard[j + 1] = temp;
+                }
+            }
+        }
+        
+        return leaderboard;
+    }
+
+    // Add batch leaderboard function for multiple races
+    function getBatchRaceLeaderboards(uint256[] calldata raceIds) external view returns (LeaderboardEntry[][] memory) {
+        LeaderboardEntry[][] memory allLeaderboards = new LeaderboardEntry[][](raceIds.length);
+        
+        for(uint256 i = 0; i < raceIds.length; i++) {
+            RaceEndInfo storage endInfo = raceEndInfo[raceIds[i]];
+            if(endInfo.resultsCalculated) {
+                RaceResult[] storage results = endInfo.results;
+                LeaderboardEntry[] memory leaderboard = new LeaderboardEntry[](results.length);
+                
+                for(uint256 j = 0; j < results.length; j++) {
+                    leaderboard[j] = LeaderboardEntry({
+                        player: results[j].player,
+                        position: results[j].finalPosition,
+                        score: results[j].score,
+                        reward: results[j].reward
+                    });
+                }
+                
+                allLeaderboards[i] = leaderboard;
+            }
+        }
+        
+        return allLeaderboards;
     }
 } 

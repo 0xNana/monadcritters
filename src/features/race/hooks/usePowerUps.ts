@@ -5,12 +5,9 @@ import { contracts } from '../../../utils/config';
 import { abi as RACE_ABI } from '../../../contracts/CritterRace/abi';
 import { useChainId } from 'wagmi';
 
-// Get contract address based on chain ID
+// Get contract address
 function useContractAddress() {
-  const chainId = useChainId();
-  return chainId === 11155111 
-    ? contracts.sepolia.race 
-    : contracts.monad.race;
+  return contracts.monad.race;
 }
 
 export const usePowerUps = () => {

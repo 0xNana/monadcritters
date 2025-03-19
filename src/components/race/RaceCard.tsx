@@ -36,6 +36,26 @@ export const RaceCard: React.FC<RaceCardProps> = ({
   const progress = (currentPlayers / maxPlayers) * 100;
   const isFull = currentPlayers >= maxPlayers;
   
+  // Get button states
+  const getJoinButtonState = () => {
+    if (isUserInRace) return { disabled: true, tooltip: "You're already in a race of this type" };
+    if (!isRaceActive) return { disabled: true, tooltip: "No active race available" };
+    if (isFull) return { disabled: true, tooltip: "This race is full" };
+    if (isLoading) return { disabled: true, tooltip: "Loading race data..." };
+    return { disabled: false, tooltip: "Join this race" };
+  };
+
+  const getCreateButtonState = () => {
+    if (isRaceActive && !isFull) return { disabled: true, tooltip: "A race is already active" };
+    if (isCreatingRace) return { disabled: true, tooltip: "Creating a new race..." };
+    if (isLoading) return { disabled: true, tooltip: "Loading race data..." };
+    if (isUserInRace) return { disabled: true, tooltip: "You're already in a race" };
+    return { disabled: false, tooltip: "Create a new race" };
+  };
+
+  const joinButtonState = getJoinButtonState();
+  const createButtonState = getCreateButtonState();
+
   return (
     <motion.div
       className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 shadow-xl border border-gray-700"
@@ -76,20 +96,12 @@ export const RaceCard: React.FC<RaceCardProps> = ({
 
         <div className="flex space-x-2">
           {/* Join Race Button */}
-          <Tooltip 
-            content={
-              isUserInRace ? "You're already in a race of this type" :
-              !isRaceActive ? "No active race available" :
-              isFull ? "This race is full" :
-              isLoading ? "Loading race data..." :
-              "Join this race"
-            }
-          >
+          <Tooltip content={joinButtonState.tooltip}>
             <button
               onClick={onJoin}
-              disabled={!onJoin || isUserInRace}
+              disabled={joinButtonState.disabled}
               className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                !onJoin || isUserInRace
+                joinButtonState.disabled
                   ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-blue-500 to-blue-700 text-white hover:from-blue-600 hover:to-blue-800'
               }`}
@@ -99,19 +111,12 @@ export const RaceCard: React.FC<RaceCardProps> = ({
           </Tooltip>
           
           {/* Create Race Button */}
-          <Tooltip
-            content={
-              isRaceActive ? "A race is already active" :
-              isCreatingRace ? "Creating a new race..." :
-              isLoading ? "Loading race data..." :
-              "Create a new race"
-            }
-          >
+          <Tooltip content={createButtonState.tooltip}>
             <button
               onClick={onCreateRace}
-              disabled={!onCreateRace || isCreatingRace}
+              disabled={createButtonState.disabled}
               className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                !onCreateRace || isCreatingRace
+                createButtonState.disabled
                   ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-green-500 to-green-700 text-white hover:from-green-600 hover:to-green-800'
               }`}
@@ -120,6 +125,16 @@ export const RaceCard: React.FC<RaceCardProps> = ({
             </button>
           </Tooltip>
         </div>
+
+        {/* Race Status Indicator */}
+        {isRaceActive && (
+          <div className="mt-2 text-center">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400">
+              <span className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
+              Race in Progress
+            </span>
+          </div>
+        )}
       </div>
     </motion.div>
   );

@@ -1,4 +1,4 @@
-import { useReadContract, useWriteContract, useWatchContractEvent, useAccount, useChainId } from 'wagmi';
+import { useReadContract, useWriteContract, useAccount, useWatchContractEvent } from 'wagmi';
 import { Address } from 'viem';
 import { useEffect, useState } from 'react';
 import { abi } from './abi';
@@ -9,36 +9,42 @@ import {
   RaceResult,
   PlayerStats,
   RaceEndInfo,
-  RaceTypeInfo
+  RaceTypeInfo,
+  LeaderboardEntry,
+  CritterStats,
+  RaceScore,
+  PowerUpRevenueWithdrawnEvent,
+  AccidentalTokensWithdrawnEvent
 } from './types';
-import { contracts } from '../../utils/config';
-import { type Config } from 'wagmi';
-
-// Get contract address based on chain ID
-function useContractAddress() {
-  const chainId = useChainId();
-  return chainId === 11155111 
-    ? contracts.sepolia.race 
-    : contracts.monad.race;
+import { contracts, QUERY_CONFIG } from '../../utils/config';
+// Get contract address from environment variable
+const RACE_CONTRACT_ADDRESS = process.env.VITE_RACE_CONTRACT_ADDRESS as Address;
+if (!RACE_CONTRACT_ADDRESS) {
+  throw new Error('VITE_RACE_CONTRACT_ADDRESS is not defined in environment variables');
 }
 
-// Contract configuration with dynamic address
+// Helper to get contract address - no chain dependency
+function useContractAddress() {
+  return RACE_CONTRACT_ADDRESS;
+}
+
+// Contract configuration with static address
 function useContractConfig() {
-  const address = useContractAddress();
   return {
-    address: address as `0x${string}`,
+    address: RACE_CONTRACT_ADDRESS,
     abi
   } as const;
 }
 
 // Get race info
 export function useRaceInfo(raceId: bigint | undefined) {
-  const contractConfig = useContractConfig();
   return useReadContract({
-    ...contractConfig,
+    address: contracts.monad.race as `0x${string}`,
+    abi,
     functionName: 'getRaceInfo',
     args: raceId ? [raceId] : undefined,
     query: {
+      ...QUERY_CONFIG.standard,
       enabled: !!raceId
     }
   });
@@ -46,11 +52,18 @@ export function useRaceInfo(raceId: bigint | undefined) {
 
 // Get active races for a specific race size
 export function useActiveRaces(raceSize: RaceSize) {
-  const contractConfig = useContractConfig();
   return useReadContract({
-    ...contractConfig,
+    address: contracts.monad.race as `0x${string}`,
+    abi,
     functionName: 'getActiveRaces',
-    args: [raceSize]
+    args: [raceSize],
+    query: {
+      ...QUERY_CONFIG.realtime,
+      select: (data) => {
+        if (!data) return [];
+        return data.filter(race => race.players.some(p => p !== '0x0000000000000000000000000000000000000000'));
+      }
+    }
   });
 }
 
@@ -133,6 +146,48 @@ export function useUserRaces(userAddress: `0x${string}` | undefined) {
   });
 }
 
+// Get batch race scores
+export function useBatchRaceScores(
+  critterIds: bigint[] | undefined,
+  boosts: bigint[] | undefined
+) {
+  const contractConfig = useContractConfig();
+  return useReadContract({
+    ...contractConfig,
+    functionName: 'getBatchRaceScores',
+    args: critterIds && boosts ? [critterIds, boosts] : undefined,
+    query: {
+      enabled: !!(critterIds && boosts && critterIds.length === boosts.length)
+    }
+  });
+}
+
+// Get race leaderboard
+export function useRaceLeaderboard(raceId: bigint | undefined) {
+  const contractConfig = useContractConfig();
+  return useReadContract({
+    ...contractConfig,
+    functionName: 'getRaceLeaderboard',
+    args: raceId ? [raceId] : undefined,
+    query: {
+      enabled: !!raceId
+    }
+  });
+}
+
+// Get batch race leaderboards
+export function useBatchRaceLeaderboards(raceIds: bigint[] | undefined) {
+  const contractConfig = useContractConfig();
+  return useReadContract({
+    ...contractConfig,
+    functionName: 'getBatchRaceLeaderboards',
+    args: raceIds ? [raceIds] : undefined,
+    query: {
+      enabled: !!raceIds
+    }
+  });
+}
+
 // Write functions with proper wagmi v2 configuration
 export function useCreateRace() {
   const contractConfig = useContractConfig();
@@ -201,53 +256,121 @@ export function useBuyPowerUps() {
 
 // Event hooks with proper typing
 export function useRaceEvents(
-  onRaceCreated?: (raceId: bigint) => void,
-  onPlayerJoined?: (raceId: bigint, player: `0x${string}`, critterId: bigint) => void,
-  onRaceStarted?: (raceId: bigint, startTime: bigint) => void,
-  onRaceEnded?: (raceId: bigint, results: RaceResult[]) => void
+  onRaceCreated: (raceId: bigint) => void,
+  onPlayerJoined: (raceId: bigint, player: `0x${string}`, critterId: bigint) => void,
+  onRaceStarted: (raceId: bigint, startTime: bigint) => void,
+  onRaceEnded: (raceId: bigint, results: RaceResult[]) => void,
+  onPowerUpRevenue: (owner: `0x${string}`, amount: bigint) => void,
+  onAccidentalTokens: (owner: `0x${string}`, amount: bigint) => void
 ) {
-  const contractConfig = useContractConfig();
-  
+  // Watch RaceCreated events
   useWatchContractEvent({
-    ...contractConfig,
-    eventName: 'RaceCreated' as const,
-    onLogs: ([log]) => {
-      if (onRaceCreated && log?.args) {
-        onRaceCreated(log.args.raceId as bigint);
-      }
+    address: contracts.monad.race as `0x${string}`,
+    abi,
+    eventName: 'RaceCreated',
+    onLogs: (logs) => {
+      const raceId = logs[0].args.raceId;
+      if (raceId) onRaceCreated(raceId);
     }
   });
-  
+
+  // Watch PlayerJoined events
   useWatchContractEvent({
-    ...contractConfig,
-    eventName: 'PlayerJoined' as const,
-    onLogs: ([log]) => {
-      if (onPlayerJoined && log?.args) {
-        const { raceId, player, critterId } = log.args as any;
+    address: contracts.monad.race as `0x${string}`,
+    abi,
+    eventName: 'PlayerJoined',
+    onLogs: (logs) => {
+      const { raceId, player, critterId } = logs[0].args;
+      if (raceId && player && critterId) {
         onPlayerJoined(raceId, player, critterId);
       }
     }
   });
-  
+
+  // Watch RaceStarted events
   useWatchContractEvent({
-    ...contractConfig,
-    eventName: 'RaceStarted' as const,
-    onLogs: ([log]) => {
-      if (onRaceStarted && log?.args) {
-        const { raceId, startTime } = log.args as any;
+    address: contracts.monad.race as `0x${string}`,
+    abi,
+    eventName: 'RaceStarted',
+    onLogs: (logs) => {
+      const { raceId, startTime } = logs[0].args;
+      if (raceId && startTime) {
         onRaceStarted(raceId, startTime);
       }
     }
   });
-  
+
+  // Watch RaceEnded events
   useWatchContractEvent({
-    ...contractConfig,
-    eventName: 'RaceEnded' as const,
-    onLogs: ([log]) => {
-      if (onRaceEnded && log?.args) {
-        const { raceId, results } = log.args as any;
-        onRaceEnded(raceId, results);
+    address: contracts.monad.race as `0x${string}`,
+    abi,
+    eventName: 'RaceEnded',
+    onLogs: (logs) => {
+      const { raceId, results } = logs[0].args;
+      if (raceId && results) {
+        // Create a new mutable array from the readonly results
+        const mutableResults: RaceResult[] = results.map(result => ({
+          player: result.player,
+          critterId: result.critterId,
+          finalPosition: result.finalPosition,
+          reward: result.reward,
+          score: result.score
+        }));
+        onRaceEnded(raceId, mutableResults);
       }
+    }
+  });
+
+  // Watch PowerUpRevenueWithdrawn events
+  useWatchContractEvent({
+    address: contracts.monad.race as `0x${string}`,
+    abi,
+    eventName: 'PowerUpRevenueWithdrawn',
+    onLogs: (logs) => {
+      const { owner, amount } = logs[0].args;
+      if (owner && amount) {
+        onPowerUpRevenue(owner, amount);
+      }
+    }
+  });
+
+  // Watch AccidentalTokensWithdrawn events
+  useWatchContractEvent({
+    address: contracts.monad.race as `0x${string}`,
+    abi,
+    eventName: 'AccidentalTokensWithdrawn',
+    onLogs: (logs) => {
+      const { owner, amount } = logs[0].args;
+      if (owner && amount) {
+        onAccidentalTokens(owner, amount);
+      }
+    }
+  });
+}
+
+// Cache base scores
+export function useCacheBaseScores() {
+  const contractConfig = useContractConfig();
+  const { writeContract } = useWriteContract();
+  return {
+    write: (args?: Parameters<typeof writeContract>[0]) =>
+      writeContract({
+        ...contractConfig,
+        functionName: 'cacheBaseScores',
+        ...args
+      })
+  };
+}
+
+// Get batch race results
+export function useBatchRaceResults(raceIds: bigint[] | undefined) {
+  const contractConfig = useContractConfig();
+  return useReadContract({
+    ...contractConfig,
+    functionName: 'getBatchRaceResults',
+    args: raceIds ? [raceIds] : undefined,
+    query: {
+      enabled: !!raceIds
     }
   });
 }
@@ -259,6 +382,11 @@ export type {
   RaceResult,
   PlayerStats,
   RaceEndInfo,
-  RaceTypeInfo
+  RaceTypeInfo,
+  LeaderboardEntry,
+  CritterStats,
+  RaceScore,
+  PowerUpRevenueWithdrawnEvent,
+  AccidentalTokensWithdrawnEvent
 };
 

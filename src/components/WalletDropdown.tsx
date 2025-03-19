@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from './WalletProvider';
 import { useBalance } from 'wagmi';
 import { Toast } from './Toast';
+import { useAppKitState } from '@reown/appkit/react';
 
 interface WalletDropdownProps {
   isOpen: boolean;
@@ -16,6 +17,11 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
     address: address as `0x${string}`,
   });
   const [showToast, setShowToast] = useState(false);
+  const appKitState = useAppKitState();
+
+  // Check if this is a social login
+  const isSocialLogin = (appKitState as any)?.data?.type === 'email' || 
+                       (appKitState as any)?.data?.type === 'social';
 
   const truncatedAddress = `${address.slice(0, 4)}...${address.slice(-4)}`;
 
@@ -51,7 +57,27 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
               transition={{ duration: 0.2 }}
               className="absolute right-0 mt-2 w-72 rounded-xl bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
             >
-              <div className="p-4">
+              <div className="p-4 relative">
+                {/* Close Button */}
+                <button
+                  onClick={onClose}
+                  className="absolute top-2 right-2 p-1 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+
                 {/* Profile Section */}
                 <div className="flex flex-col items-center mb-4">
                   <div className="w-16 h-16 rounded-full bg-purple-500/20 p-1 mb-2">
@@ -65,6 +91,11 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
                   <div className="text-sm text-gray-400">
                     {balance ? `${Number(balance.formatted).toFixed(3)} ${balance.symbol}` : '0 MON'}
                   </div>
+                  {isSocialLogin && (
+                    <div className="mt-1 px-2 py-1 bg-blue-500/20 rounded-full text-blue-300 text-xs">
+                      Social Login
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}

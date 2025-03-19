@@ -9,26 +9,17 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ startTime }) => {
 
   useEffect(() => {
     const calculateTimeLeft = () => {
-      const startTimeMs = Number(startTime) * 1000;
-      const now = Date.now();
-      const difference = startTimeMs - now;
+      const now = Math.floor(Date.now() / 1000);
+      const targetTime = Number(startTime);
+      const difference = targetTime - now;
 
       if (difference <= 0) {
         return 'Starting...';
       }
 
-      // Convert to seconds, minutes, hours
-      const seconds = Math.floor((difference / 1000) % 60);
-      const minutes = Math.floor((difference / 1000 / 60) % 60);
-      const hours = Math.floor(difference / 1000 / 60 / 60);
-
-      if (hours > 0) {
-        return `${hours}h ${minutes}m ${seconds}s`;
-      } else if (minutes > 0) {
-        return `${minutes}m ${seconds}s`;
-      } else {
-        return `${seconds}s`;
-      }
+      // Convert to seconds
+      const seconds = Math.max(0, difference);
+      return `${seconds}s`;
     };
 
     // Initial calculation

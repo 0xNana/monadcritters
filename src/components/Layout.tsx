@@ -9,12 +9,27 @@ import { useAccount } from 'wagmi'
 import React from 'react'
 
 
+type NavLink = {
+  to: string
+  label: string
+  comingSoon?: boolean
+}
+
+const NAV_LINKS: NavLink[] = [
+  { to: '/', label: 'Home' },
+  { to: '/mint', label: 'Mint' },
+  { to: '/lobby', label: 'Lobby' },
+  { to: '/race', label: 'Race' },
+  { to: '/leaderboard', label: 'Leaderboard' },
+]
+
 type NavLinkProps = {
   to: string
   children: ReactNode
+  comingSoon?: boolean
 }
 
-function NavLink({ to, children, comingSoon = false }: NavLinkProps & { comingSoon?: boolean }) {
+function NavLink({ to, children, comingSoon = false }: NavLinkProps) {
   const location = useLocation()
   const isActive = location.pathname === to
 
@@ -42,14 +57,6 @@ function NavLink({ to, children, comingSoon = false }: NavLinkProps & { comingSo
     </div>
   )
 }
-
-const NAV_LINKS = [
-  { to: '/', label: 'Home' },
-  { to: '/mint', label: 'Mint' },
-  { to: '/lobby', label: 'Lobby' },
-  { to: '/race', label: 'Race' },
-  { to: '/leaderboard', label: 'Leaderboard', comingSoon: true },
-]
 
 export function Layout({ children }: { children: ReactNode }) {
   const { isConnected } = useWallet()

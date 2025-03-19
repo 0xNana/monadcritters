@@ -30,13 +30,12 @@ export interface RaceResult {
 export interface RaceInfo {
     id: bigint;
     raceSize: RaceSize;
-    playerCount: bigint;
+    players: `0x${string}`[];
+    critterIds: bigint[];
+    startTime: bigint;
     isActive: boolean;
     hasEnded: boolean;
     prizePool: bigint;
-    startTime: bigint;
-    players: `0x${string}`[];
-    critterIds: bigint[];
 }
 
 export interface PlayerStats {
@@ -59,6 +58,26 @@ export interface RaceTypeInfo {
     entryFee: bigint;
     rewardPercentages: bigint[];
     isActive: boolean;
+}
+
+export interface LeaderboardEntry {
+    player: `0x${string}`;
+    position: bigint;
+    score: bigint;
+    reward: bigint;
+}
+
+export interface CritterStats {
+    speed: number;
+    stamina: number;
+    luck: number;
+}
+
+export interface RaceScore {
+    player: `0x${string}`;
+    critterId: bigint;
+    score: bigint;
+    position: bigint;
 }
 
 // Event types
@@ -99,6 +118,16 @@ export interface RaceTypeUpdatedEvent {
     maxPlayers: bigint;
     numWinners: bigint;
     entryFee: bigint;
+}
+
+export interface PowerUpRevenueWithdrawnEvent {
+    owner: `0x${string}`;
+    amount: bigint;
+}
+
+export interface AccidentalTokensWithdrawnEvent {
+    owner: `0x${string}`;
+    amount: bigint;
 }
 
 export interface DevFeeUpdatedEvent {

@@ -11,12 +11,9 @@ const MAX_POSITION = 287; // Maximum valid position from contract (exclusive upp
 const INITIAL_POSITION = 1; // Initial position must be > 0 per contract
 const INITIAL_SPEED = 5;  // Initial speed for critters
 
-// Get contract address based on chain ID
+// Get contract address
 function useContractAddress() {
-  const chainId = useChainId();
-  return chainId === 11155111 
-    ? contracts.sepolia.race 
-    : contracts.monad.race;
+  return contracts.monad.race;
 }
 
 // Position validation utility with detailed logging

@@ -5,21 +5,11 @@ import Home from './pages/Home'
 import MintingPage from './pages/MintingPage'
 import RaceLobbyPage from './pages/RaceLobbyPage'
 import RaceView from './features/race/components/RaceView'
-import { createConfig, WagmiConfig } from 'wagmi'
+import { WagmiConfig } from 'wagmi'
 import React from 'react'
-import { monadTestnet } from './utils/chains'
-import { sepolia } from 'viem/chains'
-import { http } from 'viem'
+import { config } from './utils/config'
 import { Layout } from './components/Layout'
-
-// Create wagmi config
-const config = createConfig({
-  chains: [monadTestnet, sepolia],
-  transports: {
-    [monadTestnet.id]: http(),
-    [sepolia.id]: http(),
-  },
-})
+import LeaderboardPage from './pages/LeaderboardPage'
 
 function App() {
   return (
@@ -33,6 +23,7 @@ function App() {
                 <Route path="/mint" element={<MintingPage />} />
                 <Route path="/lobby" element={<RaceLobbyPage />} />
                 <Route path="/race" element={<RaceView />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
               </Routes>
             </AnimatePresence>
           </Layout>

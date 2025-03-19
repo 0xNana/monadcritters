@@ -274,6 +274,62 @@ export const abi = [
       { type: 'uint256[]', name: 'scores' }
     ]
   },
+  {
+    name: 'getBatchRaceScores',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { type: 'uint256[]', name: 'critterIds' },
+      { type: 'uint256[]', name: 'boosts' }
+    ],
+    outputs: [{ type: 'uint256[]', name: 'scores' }]
+  },
+  {
+    name: 'getBatchRaceResults',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ type: 'uint256[]', name: 'raceIds' }],
+    outputs: [{
+      type: 'tuple[][]',
+      components: [
+        { type: 'address', name: 'player' },
+        { type: 'uint256', name: 'critterId' },
+        { type: 'uint256', name: 'finalPosition' },
+        { type: 'uint256', name: 'reward' },
+        { type: 'uint256', name: 'score' }
+      ]
+    }]
+  },
+  {
+    name: 'getRaceLeaderboard',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ type: 'uint256', name: 'raceId' }],
+    outputs: [{
+      type: 'tuple[]',
+      components: [
+        { type: 'address', name: 'player' },
+        { type: 'uint256', name: 'position' },
+        { type: 'uint256', name: 'score' },
+        { type: 'uint256', name: 'reward' }
+      ]
+    }]
+  },
+  {
+    name: 'getBatchRaceLeaderboards',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ type: 'uint256[]', name: 'raceIds' }],
+    outputs: [{
+      type: 'tuple[][]',
+      components: [
+        { type: 'address', name: 'player' },
+        { type: 'uint256', name: 'position' },
+        { type: 'uint256', name: 'score' },
+        { type: 'uint256', name: 'reward' }
+      ]
+    }]
+  },
 
   // Write functions
   {
@@ -364,6 +420,13 @@ export const abi = [
     stateMutability: 'nonpayable',
     inputs: [],
     outputs: []
+  },
+  {
+    name: 'cacheBaseScores',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ type: 'uint256[]', name: 'critterIds' }],
+    outputs: []
   }
 ] as const;
 
@@ -420,4 +483,11 @@ export interface RaceInfo {
   isActive: boolean;
   hasEnded: boolean;
   prizePool: bigint;
+}
+
+export interface LeaderboardEntry {
+  player: `0x${string}`;
+  position: bigint;
+  score: bigint;
+  reward: bigint;
 }

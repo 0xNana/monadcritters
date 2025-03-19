@@ -10,7 +10,7 @@ export const useRaceProgress = (
   startTime: bigint,
   isActive: boolean,
   hasEnded: boolean,
-  raceDuration: number = 60000 // Default 1 minute in milliseconds
+  raceDuration: number = 30000 // Default 30 seconds in milliseconds
 ): RaceProgress => {
   const [progress, setProgress] = useState<RaceProgress>({
     progress: 0,

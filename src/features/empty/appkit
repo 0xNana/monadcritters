@@ -1,0 +1,37 @@
+
+##Email & Socials
+To allow users to authenticate using their email or social accounts, you need to configure the features parameter in the createAppKit function.
+
+Wagmi
+
+const modal = createAppKit({
+  adapters: [wagmiAdapter],
+  projectId,
+  networks: [mainnet, arbitrum],
+  metadata,
+  features: {
+    email: true, // default to true
+    socials: ['google', 'x', 'github', 'discord', 'apple', 'facebook', 'farcaster'],
+    emailShowWallets: true, // default to true
+  },
+  allWallets: 'SHOW', // default to SHOW
+})
+
+## Options
+email [boolean] : This boolean defines whether you want to enable email login. Default true
+socials [array] : This array contains the list of social platforms that you want to enable for user authentication. The platforms in the example include Google, X, GitHub, Discord, Apple, Facebook and Farcaster. The default value of undefined displays everything. Set it to false to disable this feature. You can also pass an empty array to disable it.
+emailShowWallets [boolean] : This boolean defines whether you want to show the wallet options on the first connect screen. If this is false and socials are enabled, it will show a button that directs you to a new screen displaying the wallet options. Default true
+User flow
+Users will be able to connect to you application by simply using an email address. AppKit will send to them a One Time Password (OTP) to copy and paste in the modal, which will help to verify the user's authenticity. This will create a non-custodial wallet for your user which will be available in any application that integrates AppKit and email login.
+
+Eventually the user can optionally choose to move from a non-custodial wallet to a self-custodial one by pressing "Upgrade Wallet" on AppKit. This will open the (WalletConnect secure website) that will walk your user through the upgrading process.
+
+UI Variants
+AppKit SDK offers multiple UI variants to customize the user experience for the authentication process.
+
+By configuring the emailShowWallets option in the features parameter, you can control the initial connect screen behavior:
+
+emailShowWallets: true: When this option is enabled, the initial connect screen will display the available wallet options directly to the user. This allows users to choose their preferred wallet immediately.
+
+## Smart Accounts are exclusively available for embedded wallet users (email and social login)
+
