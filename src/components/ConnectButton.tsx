@@ -140,19 +140,6 @@ export function ConnectButton() {
       setLocalConnected(true);
     }
     
-    // Add a warning about social/email login limitations
-    const showSocialLoginWarning = () => {
-      // Only show this warning once per session
-      if (!sessionStorage.getItem('monad-social-login-warning-shown')) {
-        setTimeout(() => {
-          alert('Note: Social and email logins are currently disabled because WalletConnect does not yet support Monad testnet. Please use a wallet like MetaMask instead.');
-          sessionStorage.setItem('monad-social-login-warning-shown', 'true');
-        }, 500);
-      }
-    };
-    
-    showSocialLoginWarning();
-    
     // Call the connect function from WalletProvider
     connect();
   }, [appKitState, connect]);
