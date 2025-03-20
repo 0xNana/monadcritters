@@ -4,62 +4,84 @@ interface RaceProgress {
   progress: number;
   isComplete: boolean;
   timeLeft: number;
+  isCountdownComplete: boolean;
 }
 
 export const useRaceProgress = (
   startTime: bigint,
   isActive: boolean,
   hasEnded: boolean,
-  raceDuration: number = 30000 // Default 30 seconds in milliseconds
+  countdownDuration: number = 30000 // 30 seconds countdown in milliseconds
 ): RaceProgress => {
   const [progress, setProgress] = useState<RaceProgress>({
     progress: 0,
     isComplete: hasEnded,
-    timeLeft: 0
+    timeLeft: countdownDuration,
+    isCountdownComplete: false
   });
 
   useEffect(() => {
-    if (!isActive || hasEnded || Number(startTime) === 0) {
+    // Reset state if race is not active or no start time
+    if (!isActive || Number(startTime) === 0) {
       setProgress({
-        progress: hasEnded ? 100 : 0,
-        isComplete: hasEnded,
-        timeLeft: 0
+        progress: 0,
+        isComplete: false,
+        timeLeft: countdownDuration,
+        isCountdownComplete: false
+      });
+      return;
+    }
+
+    // If race has ended, show complete state
+    if (hasEnded) {
+      setProgress({
+        progress: 100,
+        isComplete: true,
+        timeLeft: 0,
+        isCountdownComplete: true
       });
       return;
     }
 
     const updateProgress = () => {
       const now = Date.now();
-      const start = Number(startTime) * 1000;
-      const elapsed = now - start;
-      
-      if (elapsed <= 0) {
+      const startTimeMs = Number(startTime) * 1000;
+      const elapsed = now - startTimeMs;
+
+      // During countdown phase
+      if (elapsed < countdownDuration) {
+        const timeLeft = countdownDuration - elapsed;
+        const countdownProgress = Math.min(100, (elapsed / countdownDuration) * 100);
+
         return {
-          progress: 0,
+          progress: Math.max(0, countdownProgress), // Ensure progress is not negative
           isComplete: false,
-          timeLeft: start - now
+          timeLeft: Math.max(0, timeLeft), // Ensure timeLeft is not negative
+          isCountdownComplete: false
         };
       }
 
-      if (elapsed >= raceDuration) {
-        return {
-          progress: 100,
-          isComplete: true,
-          timeLeft: 0
-        };
-      }
+      // After countdown, during race phase
+      const raceElapsed = elapsed - countdownDuration;
+      const raceDuration = 30000; // 30 seconds race duration
+      const raceProgress = Math.min(100, (raceElapsed / raceDuration) * 100);
+      const raceTimeLeft = Math.max(0, raceDuration - raceElapsed);
+
+      // Race is complete if we've exceeded race duration
+      const isComplete = raceElapsed >= raceDuration;
 
       return {
-        progress: Math.floor((elapsed / raceDuration) * 100),
-        isComplete: false,
-        timeLeft: raceDuration - elapsed
+        progress: raceProgress,
+        isComplete,
+        timeLeft: raceTimeLeft,
+        isCountdownComplete: true
       };
     };
 
     // Initial update
     setProgress(updateProgress());
 
-    // Update progress every second
+    // Update progress every 100ms for smoother countdown
     const interval = setInterval(() => {
       const newProgress = updateProgress();
       setProgress(newProgress);
@@ -68,10 +90,10 @@ export const useRaceProgress = (
       if (newProgress.isComplete) {
         clearInterval(interval);
       }
-    }, 1000);
+    }, 100);
 
     return () => clearInterval(interval);
-  }, [startTime, isActive, hasEnded, raceDuration]);
+  }, [startTime, isActive, hasEnded, countdownDuration]);
 
   return progress;
 };

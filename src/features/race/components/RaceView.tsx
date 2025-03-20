@@ -82,6 +82,11 @@ interface LeaderboardEntry {
   reward: bigint;
 }
 
+interface StartStage {
+  stage: 'initializing' | 'positioning' | 'warming' | 'starting';
+  progress: number;
+}
+
 const RACE_DURATION = 30; // Race duration in seconds
 const PROCESSING_DURATION = 10000; // Processing duration in milliseconds
 const RACE_START_COUNTDOWN = 30; // 30 seconds countdown
@@ -517,26 +522,54 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
   isProcessingRace: boolean;
   isUserParticipant: boolean;
 }) => {
-  const { progress, isComplete, timeLeft } = useRaceProgress(
+  const { progress, isComplete, timeLeft, isCountdownComplete } = useRaceProgress(
     race.startTime ? BigInt(Math.floor(race.startTime.getTime() / 1000)) : BigInt(0),
-    race.progressStatus === 'racing', // Start countdown if race status is 'racing'
+    race.progressStatus === 'racing',
     race.hasEnded,
-    RACE_DURATION * 1000
+    30000 // 30 seconds countdown
   );
+
+  const isCountdownActive = race.progressStatus === 'racing' && !isCountdownComplete;
+  const isRaceInProgress = isCountdownComplete && !isComplete;
 
   return (
     <div className="flex flex-col items-center space-y-2">
-      <div className="text-lg font-semibold text-white">
-        {timeLeft > 0 ? `${Math.ceil(timeLeft / 1000)}s remaining` : 'Race Complete!'}
-      </div>
-      <div className="w-full bg-gray-600/50 rounded-full h-2">
-        <motion.div 
-          className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full"
-          initial={{ width: 0 }}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.5 }}
-        />
-      </div>
+      {isCountdownActive && (
+        <>
+          <div className="text-lg font-semibold text-white">
+            Race starts in: {Math.ceil(timeLeft / 1000)}s
+          </div>
+          <div className="w-full bg-gray-600/50 rounded-full h-3">
+            <motion.div 
+              className="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+        </>
+      )}
+      
+      {!isCountdownActive && (
+        <>
+          <div className="text-lg font-semibold text-white">
+            {isRaceInProgress 
+              ? `Race time remaining: ${Math.ceil(timeLeft / 1000)}s`
+              : isComplete 
+                ? 'Race Complete!'
+                : 'Race in Progress'}
+          </div>
+          <div className="w-full bg-gray-600/50 rounded-full h-2">
+            <motion.div 
+              className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+        </>
+      )}
+
       {isUserParticipant && (
         <motion.button
           whileHover={{ scale: isComplete ? 1.05 : 1 }}
@@ -553,10 +586,13 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
         >
           {isProcessingRace 
             ? 'Processing...' 
-            : !isComplete
-              ? 'Race in progress...'
-              : 'End Race'
-          }
+            : isCountdownActive
+              ? 'Countdown in progress...'
+              : isRaceInProgress
+                ? 'Race in progress...'
+                : isComplete
+                  ? 'End Race'
+                  : 'Race in progress...'}
         </motion.button>
       )}
     </div>
@@ -573,9 +609,14 @@ export default function RaceView() {
   const [selectedRaceSize, setSelectedRaceSize] = useState<RaceSize>(RaceSize.Two);
   const [selectedRace, setSelectedRace] = useState<Race | null>(null);
   const [isProcessingRace, setIsProcessingRace] = useState(false);
+  const [isProcessingStartRace, setIsProcessingStartRace] = useState(false);
   const [processingRaceId, setProcessingRaceId] = useState<bigint | null>(null);
   const [historyFilter, setHistoryFilter] = useState<'all' | '24h' | 'week'>('all');
   const [selectedResultsRace, setSelectedResultsRace] = useState<Race | null>(null);
+  const [startStage, setStartStage] = useState<StartStage>({
+    stage: 'initializing',
+    progress: 0
+  });
   
   // Use the useRaceData hook from useRaceState.ts to manage race data
   const { races: allRacesInfo, loading: isLoadingRaces, refreshRaces } = useRaceData();
@@ -743,27 +784,73 @@ export default function RaceView() {
   // Simplified race operations
   const handleStartRace = async (raceId: bigint) => {
     try {
-      setIsProcessingRace(true);
+      setIsProcessingStartRace(true);
       setProcessingRaceId(raceId);
       
-      // Start the countdown immediately by updating the race state
-      const now = Math.floor(Date.now() / 1000); // Current time in seconds
-      const updatedRace = races.find(r => r.id === raceId);
-      if (updatedRace) {
-        setSelectedRace({
-          ...updatedRace,
-          progressStatus: 'racing',
-          startTime: new Date(now * 1000) // Set start time to now
-        });
-      }
+      // Start the animation sequence
+      setStartStage({ stage: 'initializing', progress: 0 });
       
+      // Simulate the stages
+      const stages: StartStage['stage'][] = ['initializing', 'positioning', 'warming', 'starting'];
+      let currentStageIndex = 0;
+
+      const progressInterval = setInterval(() => {
+        setStartStage(prev => {
+          const newProgress = prev.progress + 2;
+          if (newProgress >= 100) {
+            currentStageIndex++;
+            if (currentStageIndex >= stages.length) {
+              clearInterval(progressInterval);
+              return prev;
+            }
+            return {
+              stage: stages[currentStageIndex],
+              progress: 0
+            };
+          }
+          return {
+            ...prev,
+            progress: newProgress
+          };
+        });
+      }, 50);
+
       // Call the contract function
       await startRaceAction(Number(raceId));
       
-      // Refresh races after a short delay to get updated data
+      // Clear the interval if it's still running
+      clearInterval(progressInterval);
+      
+      // Get the current timestamp for race start
+      const startTime = new Date();
+      const updatedRace = races.find(r => r.id === raceId);
+      
+      if (updatedRace) {
+        // Create the updated race object with the new start time
+        const raceWithProgress = {
+          ...updatedRace,
+          progressStatus: 'racing' as const,
+          startTime, // Use the captured start time
+          hasEnded: false
+        };
+
+        // Update both the selected race and the races list
+        setSelectedRace(raceWithProgress);
+        
+        // Update the race in the races list
+        const updatedRaces = races.map(race => 
+          race.id === raceId ? raceWithProgress : race
+        );
+        
+        // Force a refresh of the organized races
+        const organized = organizeRacesBySize(updatedRaces);
+        setOrganizedRaces(organized);
+      }
+
+      // Refresh races after the countdown duration
       setTimeout(() => {
         refreshRaces();
-      }, 2000);
+      }, 32000); // 32 seconds to ensure we get the updated state after countdown
     } catch (error) {
       console.error('Failed to start race:', error);
       toast.error('Failed to start the race. Please try again.');
@@ -774,7 +861,7 @@ export default function RaceView() {
         setSelectedRace(originalRace);
       }
     } finally {
-      setIsProcessingRace(false);
+      setIsProcessingStartRace(false);
       setProcessingRaceId(null);
     }
   };
@@ -1606,6 +1693,39 @@ export default function RaceView() {
                   <div className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
                     {raceStats.duration}s
                   </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Start Race Processing Overlay */}
+          {isProcessingStartRace && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+            >
+              <div className="bg-gray-800/90 rounded-xl p-8 max-w-md w-full mx-4 border border-gray-700/50">
+                <div className="text-center">
+                  <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-green-500 border-r-transparent mb-4"></div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Preparing Race</h2>
+                  <p className="text-gray-300 mb-4">
+                    {startStage?.stage === 'initializing' && 'Initializing race track...'}
+                    {startStage?.stage === 'positioning' && 'Positioning critters at starting line...'}
+                    {startStage?.stage === 'warming' && 'Warming up engines...'}
+                    {startStage?.stage === 'starting' && 'Ready, set, GO!'}
+                  </p>
+                  
+                  <div className="w-full bg-gray-700 rounded-full h-2 mb-4">
+                    <div 
+                      className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${startStage?.progress || 0}%` }}
+                    />
+                  </div>
+                  
+                  <p className="text-sm text-gray-400">
+                    Get ready! The race is about to begin... 🏁
+                  </p>
                 </div>
               </div>
             </motion.div>

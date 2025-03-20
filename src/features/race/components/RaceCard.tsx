@@ -1,22 +1,53 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Race } from '../types';
 import { RaceStatus } from './RaceStatus'; 
 
 interface RaceCardProps {
   race: Race;
-  countdown: number;
   onStartRace: (raceId: number) => void;
   onEndRace: (raceId: number) => void;
+  isProcessingRace: boolean;
   userAddress?: string;
 }
 
-const RaceCard: React.FC<RaceCardProps> = ({
+export const RaceCard: React.FC<RaceCardProps> = ({
   race,
-  countdown,
   onStartRace,
   onEndRace,
+  isProcessingRace,
   userAddress
 }) => {
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [canEndRace, setCanEndRace] = useState(false);
+
+  // Add countdown effect when race starts
+  useEffect(() => {
+    if (race.startTime && !canEndRace) {
+      const startTimeMs = Number(race.startTime) * 1000;
+      const endTimeMs = startTimeMs + 30000; // 30 seconds
+      const now = Date.now();
+      
+      if (now < endTimeMs) {
+        setCountdown(Math.ceil((endTimeMs - now) / 1000));
+        
+        const timer = setInterval(() => {
+          const remaining = Math.ceil((endTimeMs - Date.now()) / 1000);
+          if (remaining <= 0) {
+            setCountdown(null);
+            setCanEndRace(true);
+            clearInterval(timer);
+          } else {
+            setCountdown(remaining);
+          }
+        }, 1000);
+        
+        return () => clearInterval(timer);
+      } else {
+        setCanEndRace(true);
+      }
+    }
+  }, [race.startTime]);
+
   const isUserInRace = race.players.includes(userAddress || '');
   const isFull = race.currentPlayers === race.maxPlayers;
   const canStart = isFull && !race.progressStatus;
@@ -67,7 +98,7 @@ const RaceCard: React.FC<RaceCardProps> = ({
               </button>
               <button
                 onClick={() => onEndRace(race.id)}
-                disabled={!canEnd}
+                disabled={!canEndRace}
                 className="w-full py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-lg font-medium hover:from-red-600 hover:to-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 End Race
