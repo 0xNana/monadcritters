@@ -38,12 +38,12 @@ createAppKit({
   },
   projectId: REOWN_PROJECT_ID,
   features: {
-    analytics: false, // Disable analytics to avoid 403 errors
-    email: false, // Disable email login since WalletConnect doesn't support Monad testnet
-    socials: [], // Disable social logins since WalletConnect doesn't support Monad testnet
-    emailShowWallets: true, // Show wallet options on first connect screen
+    analytics: false,
+    email: false,
+    socials: [],
+    emailShowWallets: false // Don't show wallet selection screen
   },
-  allWallets: 'SHOW', // Show all available wallets
+  allWallets: 'SHOW' // Show all available wallets
 })
 
 // Add error handler for postMessage errors

@@ -33,8 +33,21 @@ export const useRaceContract = () => {
       return result;
     } catch (error: any) {
       console.error('Contract Error:', error);
-      const message = error?.reason || error?.message || 'Transaction failed';
-      toast.error(message, { id: toastId });
+      // Enhanced error handling for insufficient funds
+      if (
+        error?.message?.toLowerCase().includes('insufficient funds') ||
+        error?.message?.toLowerCase().includes('insufficient balance') ||
+        error?.reason?.toLowerCase().includes('insufficient') ||
+        error?.details?.toLowerCase().includes('insufficient')
+      ) {
+        toast.error('Insufficient funds to complete this transaction.', { 
+          id: toastId,
+          duration: 5000 // Show for 5 seconds
+        });
+      } else {
+        const message = error?.reason || error?.message || 'Transaction failed';
+        toast.error(message, { id: toastId });
+      }
       throw error;
     }
   };
@@ -45,7 +58,7 @@ export const useRaceContract = () => {
 // Update constants
 const RACE_DATA_CACHE_KEY = 'race_data_cache';
 const RACE_DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const FETCH_DEBOUNCE_DELAY = 15000; // 15 seconds debounce
+const FETCH_DEBOUNCE_DELAY = 5000; // 5 seconds debounce
 const POLLING_INTERVAL = 30000; // 30 seconds polling
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
@@ -77,8 +90,10 @@ export const useRaceData = () => {
   const [retryCount, setRetryCount] = useState(0);
   const lastFetchRef = useRef<number>(0);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const backgroundDataRef = useRef<RaceInfo[]>([]);
+  const isInitialLoadRef = useRef(true);
 
-  const fetchRaces = useCallback(async (force = false) => {
+  const fetchRaces = useCallback(async (force = false, isBackground = false) => {
     if (!publicClient) return;
 
     const now = Date.now();
@@ -86,12 +101,15 @@ export const useRaceData = () => {
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
-      fetchTimeoutRef.current = setTimeout(() => fetchRaces(true), FETCH_DEBOUNCE_DELAY);
+      fetchTimeoutRef.current = setTimeout(() => fetchRaces(true, isBackground), FETCH_DEBOUNCE_DELAY);
       return;
     }
 
     try {
-      setLoading(true);
+      // Only show loading state on initial load
+      if (!isBackground && isInitialLoadRef.current) {
+        setLoading(true);
+      }
       lastFetchRef.current = now;
 
       // Try to get from cache first
@@ -110,11 +128,18 @@ export const useRaceData = () => {
           }) as RaceDataCache;
 
           if (Date.now() - parsedCache.timestamp < RACE_DATA_CACHE_DURATION) {
-            setRaces(parsedCache.data);
-            setLoading(false);
+            if (!isBackground) {
+              setRaces(parsedCache.data);
+            } else {
+              backgroundDataRef.current = parsedCache.data;
+            }
+            if (isInitialLoadRef.current) {
+              setLoading(false);
+              isInitialLoadRef.current = false;
+            }
             // Schedule a background refresh if cache is older than half its duration
             if (Date.now() - parsedCache.timestamp > RACE_DATA_CACHE_DURATION / 2) {
-              setTimeout(() => fetchRaces(true), 1000);
+              setTimeout(() => fetchRaces(true, true), 1000);
             }
             return;
           }
@@ -138,16 +163,14 @@ export const useRaceData = () => {
           }
         } catch (error: any) {
           console.error(`Error fetching races for size ${size}:`, error);
-          // Don't break the loop on error, continue with other sizes
           if (error?.message?.includes('429') || error?.message?.includes('400')) {
-            // Wait before trying next size
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
       }
 
       const formattedRaces = allRaces
-        .filter((race): race is RawRaceData => Boolean(race && race.id)) // Type guard to ensure valid races
+        .filter((race): race is RawRaceData => Boolean(race && race.id))
         .map(race => ({
           id: race.id,
           raceSize: race.raceSize as RaceSize,
@@ -161,7 +184,19 @@ export const useRaceData = () => {
         }));
 
       if (formattedRaces.length > 0) {
-        setRaces(formattedRaces);
+        if (!isBackground) {
+          setRaces(formattedRaces);
+        } else {
+          // Store background data and only update UI if there are meaningful changes
+          const hasChanges = JSON.stringify(formattedRaces) !== JSON.stringify(races);
+          if (hasChanges) {
+            backgroundDataRef.current = formattedRaces;
+            // Use requestAnimationFrame to smoothly update UI
+            requestAnimationFrame(() => {
+              setRaces(formattedRaces);
+            });
+          }
+        }
         setRetryCount(0);
 
         // Cache the results
@@ -178,66 +213,55 @@ export const useRaceData = () => {
         } catch (error) {
           console.error('Error caching race data:', error);
         }
-      } else if (cached) {
-        // If no new data but we have cache, keep using it
-        const parsedCache = JSON.parse(cached, (key, value) => {
-          if (typeof value === 'string' && /^\d+$/.test(value)) {
-            try {
-              return BigInt(value);
-            } catch {
-              return value;
-            }
-          }
-          return value;
-        }) as RaceDataCache;
-        setRaces(parsedCache.data);
       }
 
     } catch (error: any) {
       console.error('Error fetching races:', error);
-      // Handle rate limiting with exponential backoff
       if (error?.message?.includes('429') || error?.message?.includes('400')) {
         const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
         if (retryCount < MAX_RETRIES) {
           setRetryCount(prev => prev + 1);
-          setTimeout(() => fetchRaces(true), retryDelay);
-        } else {
+          setTimeout(() => fetchRaces(true, true), retryDelay);
+        } else if (!isBackground) {
           toast.error('Too many requests. Please try again later.');
         }
-      } else {
+      } else if (!isBackground) {
         toast.error('Failed to fetch races. Using cached data if available.');
       }
     } finally {
-      setLoading(false);
+      if (!isBackground && isInitialLoadRef.current) {
+        setLoading(false);
+        isInitialLoadRef.current = false;
+      }
     }
-  }, [contract, publicClient, retryCount]);
+  }, [contract, publicClient, retryCount, races]);
 
   useEffect(() => {
     if (!publicClient) return;
     
-    fetchRaces();
+    // Initial fetch
+    fetchRaces(false, false);
 
-    // Set up polling interval
+    // Set up polling interval for background updates
     const pollInterval = setInterval(() => {
       const now = Date.now();
       if (now - lastFetchRef.current >= FETCH_DEBOUNCE_DELAY) {
-        fetchRaces(true);
+        fetchRaces(true, true);
       }
     }, POLLING_INTERVAL);
 
-    // Single event handler for all events
+    // Watch for race events in the background
     const unwatch = publicClient.watchContractEvent({
       ...contract,
-      eventName: 'RaceEnded', // Only watch for race end events
+      eventName: 'RaceEnded',
       onLogs: () => {
         const now = Date.now();
         if (now - lastFetchRef.current >= FETCH_DEBOUNCE_DELAY) {
-          fetchRaces(true);
+          fetchRaces(true, true);
         }
       }
     });
 
-    // Cleanup
     return () => {
       clearInterval(pollInterval);
       unwatch();
@@ -247,7 +271,19 @@ export const useRaceData = () => {
     };
   }, [contract, publicClient, fetchRaces]);
 
-  return { races, loading, refreshRaces: () => fetchRaces(true) };
+  // Expose a function to force a UI refresh from background data
+  const forceRefresh = useCallback(() => {
+    if (backgroundDataRef.current.length > 0) {
+      setRaces(backgroundDataRef.current);
+    }
+  }, []);
+
+  return { 
+    races, 
+    loading, 
+    refreshRaces: () => fetchRaces(true, false),
+    forceRefresh 
+  };
 };
 
 // Race actions hook
@@ -326,18 +362,53 @@ export const usePowerUps = () => {
   };
 
   const buyPowerUps = async (amount: number) => {
-    if (!walletClient) throw new Error('Wallet not connected');
+    if (!walletClient) {
+      toast.error('Please connect your wallet first.');
+      return;
+    }
 
-    const cost = parseEther('0.01') * BigInt(amount); // Assuming 0.01 ETH per power-up
-    return wrapWithErrorHandler(
-      walletClient.writeContract({
-        ...contract,
-        functionName: 'buyPowerUps',
-        args: [BigInt(amount)],
-        value: cost
-      }),
-      'Purchasing power-ups...'
-    );
+    if (!address) {
+      toast.error('No wallet address found.');
+      return;
+    }
+
+    if (!publicClient) {
+      toast.error('Network connection error.');
+      return;
+    }
+
+    const cost = parseEther('0.01') * BigInt(amount); // 0.01 ETH per power-up
+
+    try {
+      // Check balance before attempting purchase
+      const balance = await publicClient.getBalance({ address });
+      if (balance < cost) {
+        toast.error(
+          `Insufficient funds. You need ${(Number(cost) / 1e18).toFixed(3)} ETH to purchase ${amount} boost${amount > 1 ? 's' : ''}.`, 
+          { duration: 5000 }
+        );
+        return;
+      }
+
+      return wrapWithErrorHandler(
+        walletClient.writeContract({
+          ...contract,
+          functionName: 'buyPowerUps',
+          args: [BigInt(amount)],
+          value: cost
+        }),
+        'Purchasing power-ups...'
+      );
+    } catch (error: any) {
+      // Additional error handling specific to power-up purchase
+      if (error?.message?.toLowerCase().includes('insufficient funds')) {
+        toast.error(
+          `Insufficient funds. You need ${(Number(cost) / 1e18).toFixed(3)} ETH to purchase ${amount} boost${amount > 1 ? 's' : ''}.`,
+          { duration: 5000 }
+        );
+      }
+      throw error;
+    }
   };
 
   useEffect(() => {
