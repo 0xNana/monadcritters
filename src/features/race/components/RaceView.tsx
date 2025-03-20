@@ -737,13 +737,6 @@ export default function RaceView() {
     { value: RaceSize.Ten, label: '10/10' }
   ];
 
-  // Add debug logging for race size options
-  console.log('Race size options:', raceSizeOptions.map(option => ({
-    label: option.label,
-    value: option.value,
-    numericValue: Number(option.value)
-  })));
-  
   // Use the useRaceActions hook for race operations
   const { startRace: startRaceAction, endRace: endRaceAction, processing } = useRaceActions();
   
@@ -866,7 +859,6 @@ export default function RaceView() {
           setSelectedResultsRace(raceWithResults);
           toast.success('Race completed! View your results.');
         } catch (error) {
-          console.error('Error fetching race results:', error);
           toast.error('Failed to fetch race results. Please try again.');
         }
       }
@@ -876,8 +868,7 @@ export default function RaceView() {
         refreshRaces();
       }, 2000);
     } catch (error) {
-      console.error('Failed to end race:', error);
-      toast.error('Failed to end the race. Please try again.');
+      toast.error('Failed to end race. Please try again.');
     } finally {
       setIsProcessingRace(false);
       setProcessingRaceId(null);

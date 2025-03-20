@@ -128,13 +128,6 @@ const ResultsModal: React.FC<ResultsModalProps> = ({ race, onClose, userAddress 
               <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">
                 Race Results ({race.size} Players)
               </h2>
-              {resultSource && (
-                <p className="text-sm text-gray-400 mt-1">
-                  Source: {resultSource === 'raceInfo' ? 'Race Data' : 
-                          resultSource === 'contract' ? 'Contract Cache' : 
-                          'Leaderboard'}
-                </p>
-              )}
             </div>
             <button 
               onClick={onClose}

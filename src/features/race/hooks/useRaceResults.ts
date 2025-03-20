@@ -196,7 +196,7 @@ const hasDistributedRewards = (results: ContractRaceResult[] | LeaderboardEntry[
     return results.some(result => result.reward > 0n);
 };
 
-// Add function to check if rewards have been distributed for a race
+// Update checkRewardsDistributed function
 const checkRewardsDistributed = async (publicClient: any, raceId: bigint): Promise<boolean> => {
     try {
         const raceInfo = await makeContractCall<RaceInfo>(
@@ -216,15 +216,12 @@ const checkRewardsDistributed = async (publicClient: any, raceId: bigint): Promi
 
         return false;
     } catch (err) {
-        console.log('Failed to check rewards distribution', {
-            raceId: raceId.toString(),
-            error: err
-        });
+        toast.error('Failed to check rewards distribution');
         return false;
     }
 };
 
-// Add new function to get scores through different methods
+// Update getScoresByMethod function
 const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<RaceResult[] | null> => {
     let pendingError = false;
     let rateLimitHit = false;
@@ -233,16 +230,9 @@ const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<Rac
 
     // First check if rewards have been distributed
     rewardsDistributed = await checkRewardsDistributed(publicClient, raceId);
-    
-    if (rewardsDistributed) {
-        console.log('Rewards have been distributed, results should exist', {
-            raceId: raceId.toString()
-        });
-    }
 
     // Method 1: Try getBatchRaceResults first (most efficient)
     try {
-        console.log('Attempting batch results fetch', { raceId: raceId.toString() });
         const batchResults = await makeContractCall<readonly ContractRaceResult[][]>(
             publicClient,
             {
@@ -259,18 +249,9 @@ const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<Rac
         }
     } catch (err) {
         lastError = err;
-        console.log('Batch results fetch failed, trying next method', {
-            raceId: raceId.toString(),
-            error: err,
-            isRevert: isContractRevertError(err),
-            isPending: isResultsPendingError(err),
-            rewardsDistributed
-        });
-        
         if (isRateLimitError(err)) {
             rateLimitHit = true;
         } else if (!rewardsDistributed && isResultsPendingError(err)) {
-            // Only set pending error if rewards haven't been distributed
             pendingError = true;
         }
     }
@@ -278,10 +259,6 @@ const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<Rac
     // Method 2: Try getRaceLeaderboard with queued request
     if (!rateLimitHit && (!pendingError || rewardsDistributed)) {
         try {
-            console.log('Attempting leaderboard fetch', { 
-                raceId: raceId.toString(),
-                rewardsDistributed 
-            });
             const leaderboard = await makeContractCall<LeaderboardEntry[]>(
                 publicClient,
                 {
@@ -297,18 +274,9 @@ const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<Rac
             }
         } catch (err) {
             lastError = err;
-            console.log('Leaderboard fetch failed, trying next method', {
-                raceId: raceId.toString(),
-                error: err,
-                isRevert: isContractRevertError(err),
-                isPending: isResultsPendingError(err),
-                rewardsDistributed
-            });
-            
             if (isRateLimitError(err)) {
                 rateLimitHit = true;
             } else if (!rewardsDistributed && isResultsPendingError(err)) {
-                // Only set pending error if rewards haven't been distributed
                 pendingError = true;
             }
         }
@@ -317,10 +285,6 @@ const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<Rac
     // Method 3: Try getRaceInfo with queued request
     if (!rateLimitHit && (!pendingError || rewardsDistributed)) {
         try {
-            console.log('Attempting to get race info', { 
-                raceId: raceId.toString(),
-                rewardsDistributed 
-            });
             const raceInfo = await makeContractCall<RaceInfo>(
                 publicClient,
                 {
@@ -331,27 +295,11 @@ const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<Rac
                 }
             );
 
-            // Log race info for debugging
-            console.log('Race info received', {
-                raceId: raceId.toString(),
-                hasEnded: raceInfo.hasEnded,
-                isActive: raceInfo.isActive,
-                hasResults: Boolean(raceInfo.results?.length),
-                rewardsDistributed
-            });
-
             if (raceInfo.hasEnded && raceInfo.results && raceInfo.results.length > 0) {
                 return convertContractResults(raceInfo.results);
             }
         } catch (err) {
             lastError = err;
-            console.log('Race info fetch failed', {
-                raceId: raceId.toString(),
-                error: err,
-                isRevert: isContractRevertError(err),
-                isPending: isResultsPendingError(err),
-                rewardsDistributed
-            });
             if (isRateLimitError(err)) {
                 rateLimitHit = true;
             }
@@ -401,11 +349,6 @@ export function useRaceResults({ raceId, userAddress, isCompleted }: UseRaceResu
         const cached = resultsCache.get(cacheKey);
         
         if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-            console.log('Found cached results', { 
-                raceId: raceId.toString(), 
-                source: cached.source, 
-                resultsCount: cached.results.length 
-            });
             return cached;
         }
         return null;
@@ -413,7 +356,7 @@ export function useRaceResults({ raceId, userAddress, isCompleted }: UseRaceResu
 
     const fetchResults = useCallback(async () => {
         if (!publicClient || !raceId) {
-            console.warn('Missing publicClient or raceId', { publicClient, raceId });
+            toast.error('Missing required data to fetch results');
             return;
         }
 
@@ -424,11 +367,6 @@ export function useRaceResults({ raceId, userAddress, isCompleted }: UseRaceResu
             // Try cache first
             const cached = getCachedResults();
             if (cached) {
-                console.log('Using cached results', { 
-                    raceId: raceId.toString(),
-                    source: cached.source, 
-                    resultsCount: cached.results.length 
-                });
                 setResults(cached.results);
                 setResultSource(cached.source);
                 setIsLoading(false);
@@ -439,11 +377,6 @@ export function useRaceResults({ raceId, userAddress, isCompleted }: UseRaceResu
             const scores = await getScoresByMethod(publicClient, raceId);
             
             if (scores) {
-                console.log('Successfully retrieved scores', {
-                    raceId: raceId.toString(),
-                    count: scores.length
-                });
-                
                 setResults(scores);
                 setResultSource('contract');
                 
@@ -462,13 +395,6 @@ export function useRaceResults({ raceId, userAddress, isCompleted }: UseRaceResu
             throw new Error('Results are still being calculated. Please try again in a moment.');
 
         } catch (error: any) {
-            console.error('Error fetching race results:', {
-                raceId: raceId.toString(),
-                error,
-                isPending: isResultsPendingError(error) || error?.name === 'ResultsPending',
-                isRateLimit: isRateLimitError(error) || error?.name === 'RateLimit'
-            });
-            
             setError(error as Error);
             
             // If we've exceeded max retries, show a more helpful error
@@ -481,7 +407,8 @@ export function useRaceResults({ raceId, userAddress, isCompleted }: UseRaceResu
                         : 'Unable to fetch results. Please try again later.'
                 );
                 setError(finalError);
-                    return;
+                toast.error(finalError.message);
+                return;
             }
             
             // Calculate retry delay - longer for rate limits
@@ -489,8 +416,8 @@ export function useRaceResults({ raceId, userAddress, isCompleted }: UseRaceResu
             const retryDelay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
             
             // Increment retry count and retry after delay
-                setRetryCount(prev => prev + 1);
-            console.log(`Retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+            setRetryCount(prev => prev + 1);
+            toast.loading(`Retrying in ${Math.ceil(retryDelay / 1000)}s...`, { duration: retryDelay });
             setTimeout(() => fetchResults(), retryDelay);
         } finally {
             setIsLoading(false);
