@@ -3,20 +3,6 @@ import { useWallet } from './WalletProvider'
 import { WalletDropdown } from './WalletDropdown'
 import { useAppKitState } from '@reown/appkit/react'
 
-// Add type declarations at the top of the file
-interface EthereumProvider {
-  isInBrowserWallet?: boolean;
-  isPhantom?: boolean;
-  isBraveWallet?: boolean;
-  isTrust?: boolean;
-  isCoinbaseWallet?: boolean;
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
-}
-
-interface Window {
-  ethereum?: EthereumProvider;
-}
-
 // Simple placeholder avatar using Jazzicon-style background
 const getAvatarBackground = (address: string) => {
   const hue = parseInt(address.slice(2, 8), 16) % 360;
@@ -142,49 +128,33 @@ export function ConnectButton() {
 
   // Handle connect button click
   const handleConnect = useCallback(async () => {
-    try {
-      // Check if we're in a browser wallet environment
-      const provider = window.ethereum;
-      const isInBrowserWallet = provider && (
-        'isPhantom' in provider ||
-        'isBraveWallet' in provider ||
-        'isTrust' in provider ||
-        'isCoinbaseWallet' in provider
-      );
-
-      // Check if we already have an address in AppKit state
-      const appKitAddress = 
-        (appKitState as any)?.address || 
-        (appKitState as any)?.data?.address ||
-        (appKitState as any)?.w3mState?.address;
-      
-      if (appKitAddress) {
-        console.debug('Already have address in AppKit state, updating local state:', appKitAddress);
-        setLocalAddress(appKitAddress);
-        setLocalConnected(true);
-      }
-
-      // Call the connect function from WalletProvider
-      await connect();
-
-      // If we're in a browser wallet, we might need to manually request accounts
-      if (isInBrowserWallet && provider) {
-        try {
-          // Use a type assertion for the provider
-          const ethereum = provider as { request: (args: { method: string }) => Promise<string[]> };
-          const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-          
-          if (accounts?.[0]) {
-            setLocalAddress(accounts[0]);
-            setLocalConnected(true);
-          }
-        } catch (error) {
-          console.error('Error requesting accounts:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Connection error:', error);
+    // Check if we already have an address in AppKit state
+    const appKitAddress = 
+      (appKitState as any)?.address || 
+      (appKitState as any)?.data?.address ||
+      (appKitState as any)?.w3mState?.address;
+    
+    if (appKitAddress) {
+      console.debug('Already have address in AppKit state, updating local state:', appKitAddress);
+      setLocalAddress(appKitAddress);
+      setLocalConnected(true);
     }
+    
+    // Add a warning about social/email login limitations
+    const showSocialLoginWarning = () => {
+      // Only show this warning once per session
+      if (!sessionStorage.getItem('monad-social-login-warning-shown')) {
+        setTimeout(() => {
+          alert('Note: Social and email logins are currently disabled.');
+          sessionStorage.setItem('monad-social-login-warning-shown', 'true');
+        }, 500);
+      }
+    };
+    
+    showSocialLoginWarning();
+    
+    // Call the connect function from WalletProvider
+    connect();
   }, [appKitState, connect]);
 
   if (!effectivelyConnected) {

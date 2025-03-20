@@ -23,7 +23,7 @@ const queryClient = new QueryClient()
 // Create Wagmi adapter
 const wagmiAdapter = new WagmiAdapter({
   networks: [monadTestnet],
-  projectId: REOWN_PROJECT_ID
+  projectId: REOWN_PROJECT_ID,
 })
 
 // Initialize AppKit
@@ -38,12 +38,12 @@ createAppKit({
   },
   projectId: REOWN_PROJECT_ID,
   features: {
-    analytics: false,
-    email: false,
-    socials: [],
-    emailShowWallets: true // Show all wallet options
+    analytics: false, // Disable analytics to avoid 403 errors
+    email: false, // Disable email login since WalletConnect doesn't support Monad testnet
+    socials: [], // Disable social logins since WalletConnect doesn't support Monad testnet
+    emailShowWallets: true, // Show wallet options on first connect screen
   },
-  allWallets: 'SHOW' // Show all available wallets
+  allWallets: 'SHOW', // Show all available wallets
 })
 
 // Add error handler for postMessage errors
