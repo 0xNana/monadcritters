@@ -336,7 +336,7 @@ const batchManager = {
     try {
       await Promise.all(batch.map(raceId => debouncedProcessRace(raceId)));
     } catch (error) {
-      console.error('Error processing race batch:', error);
+      toast.error('Failed to process race batch. Please try again.');
     }
   }
 };
@@ -459,13 +459,11 @@ const getRaceResults = async (raceId: bigint, publicClient: any, attempt = 1, ma
   const cacheKey = `race_results_${raceId}`;
   const cached = raceResultsCache.get(cacheKey);
   
-  // Return cached results if they're still valid
   if (cached && Date.now() - cached.timestamp < RACE_RESULTS_CACHE_DURATION) {
     return cached.results;
   }
   
   try {
-    // Use the getRaceLeaderboard function from the contract
     const results = await publicClient.readContract({
       address: contracts.monad.race as `0x${string}`,
       abi,
@@ -473,16 +471,15 @@ const getRaceResults = async (raceId: bigint, publicClient: any, attempt = 1, ma
       args: [raceId]
     }) as ContractRaceResult[];
     
-    // If results array is empty and we haven't exceeded max attempts, retry
     if ((!results || results.length === 0) && attempt < maxAttempts) {
       const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
-      console.log(`Results not ready, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})...`);
-      
+      if (attempt === 1) {
+        toast.loading('Calculating race results...', { duration: delay });
+      }
       await new Promise(resolve => setTimeout(resolve, delay));
       return getRaceResults(raceId, publicClient, attempt + 1, maxAttempts);
     }
     
-    // Convert contract results to LeaderboardEntry type
     const convertedResults = results.map(result => ({
       player: result.player as `0x${string}`,
       position: BigInt(result.position),
@@ -490,7 +487,6 @@ const getRaceResults = async (raceId: bigint, publicClient: any, attempt = 1, ma
       reward: result.reward
     }));
     
-    // Cache the results if we have them
     if (convertedResults.length > 0) {
       raceResultsCache.set(cacheKey, {
         timestamp: Date.now(),
@@ -500,17 +496,14 @@ const getRaceResults = async (raceId: bigint, publicClient: any, attempt = 1, ma
     
     return convertedResults;
   } catch (error) {
-    console.error('Error fetching race results:', error);
-    
     if (attempt < maxAttempts && error instanceof Error && 
         (error.message.includes('still calculating') || error.message.includes('not found'))) {
       const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
-      console.log(`Results still calculating, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})...`);
-      
       await new Promise(resolve => setTimeout(resolve, delay));
       return getRaceResults(raceId, publicClient, attempt + 1, maxAttempts);
     }
     
+    toast.error('Failed to fetch race results. Please try again.');
     return cached?.results || [];
   }
 };
@@ -584,15 +577,7 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
                 : "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white hover:shadow-red-500/25 cursor-pointer"
           }`}
         >
-          {isProcessingRace 
-            ? 'Processing...' 
-            : isCountdownActive
-              ? 'Countdown in progress...'
-              : isRaceInProgress
-                ? 'Race in progress...'
-                : isComplete
-                  ? 'End Race'
-                  : 'Race in progress...'}
+          {isProcessingRace ? 'Processing...' : isCountdownActive ? 'Countdown in progress...' : isRaceInProgress ? 'Race in progress...' : isComplete ? 'End Race' : 'Race in progress...'}
         </motion.button>
       )}
     </div>
@@ -684,31 +669,12 @@ export default function RaceView() {
 
   // Derived state - simpler and more direct
   const races = useMemo(() => {
-    // Log the race sizes for debugging
-    console.log('All races:', allRaces.map(race => ({
-      id: race.id.toString(),
-      size: race.size,
-      raceSize: Number(race.raceSize)
-    })));
-    console.log('Selected race size:', Number(selectedRaceSize));
-    
     // Filter races based on exact race size match
     const filteredRaces = allRaces.filter(race => {
-      // Convert both values to numbers for proper comparison
       const raceSize = Number(race.raceSize);
       const selected = Number(selectedRaceSize);
-      
-      console.log(`Race ${race.id.toString()}: raceSize=${raceSize}, selectedSize=${selected}, matches=${raceSize === selected}`);
-      
-      // Only include races that exactly match the selected size
       return raceSize === selected;
     });
-
-    console.log('Filtered races:', filteredRaces.map(race => ({
-      id: race.id.toString(),
-      size: race.size,
-      raceSize: Number(race.raceSize)
-    })));
 
     return filteredRaces;
   }, [allRaces, selectedRaceSize]);
@@ -898,6 +864,7 @@ export default function RaceView() {
           };
           
           setSelectedResultsRace(raceWithResults);
+          toast.success('Race completed! View your results.');
         } catch (error) {
           console.error('Error fetching race results:', error);
           toast.error('Failed to fetch race results. Please try again.');
@@ -945,12 +912,14 @@ export default function RaceView() {
   useRaceEvents(
     // Race Created
     (raceId) => {
-      console.log('Race created:', raceId);
+      toast.success('New race created!');
       refreshRaces();
     },
     // Player Joined
     (raceId, player, critterId) => {
-      console.log('Player joined:', { raceId, player, critterId });
+      if (player.toLowerCase() === address?.toLowerCase()) {
+        toast.success('Successfully joined the race!');
+      }
       refreshRaces();
       
       // If this is the current user, select this race
@@ -973,7 +942,7 @@ export default function RaceView() {
     },
     // Race Started
     (raceId, startTime) => {
-      console.log('Race started:', { raceId, startTime });
+      toast.success('Race started! Get ready!');
       refreshRaces();
       
       // Update the selected race if it's the one that started
@@ -987,8 +956,6 @@ export default function RaceView() {
     },
     // Race Ended
     async (raceId, results) => {
-      console.log('Race ended:', { raceId, results });
-      
       // Add a small delay to ensure the blockchain has processed the results
       await new Promise(resolve => setTimeout(resolve, 2000));
       
@@ -1015,10 +982,11 @@ export default function RaceView() {
           // Show results modal if user was in the race
           if (isUserParticipant(endedRace)) {
             setSelectedResultsRace(raceWithResults);
+            toast.success('Race completed! View your results.');
           }
         }
       } catch (error) {
-        console.error('Error handling race end event:', error);
+        toast.error('Error processing race results. Please try again.');
       }
       
       // Refresh races to update UI
@@ -1026,16 +994,15 @@ export default function RaceView() {
     },
     // PowerUp Revenue Withdrawn
     (owner: `0x${string}`, amount: bigint) => {
-      console.log('PowerUp revenue withdrawn:', { owner, amount });
       if (owner.toLowerCase() === address?.toLowerCase()) {
+        toast.success(`Successfully withdrew ${formatUnits(amount, 18)} MON!`);
         refreshRaces();
       }
     },
     // PowerUps Purchased
     (player: `0x${string}`, speedBoosts: bigint) => {
-      console.log('PowerUps purchased:', { player, speedBoosts });
       if (player.toLowerCase() === address?.toLowerCase()) {
-        // Refresh races to update UI with new power-up counts
+        toast.success(`Successfully purchased ${speedBoosts.toString()} speed boosts!`);
         refreshRaces();
       }
     }
@@ -1255,11 +1222,6 @@ export default function RaceView() {
   // Update the filtered active races logic
   const filteredActiveRaces = useMemo(() => {
     const filtered = races.filter(race => !race.hasEnded);
-    console.log('Filtered active races:', filtered.map(race => ({
-      id: race.id.toString(),
-      size: race.size,
-      raceSize: Number(race.raceSize)
-    })));
     return filtered;
   }, [races]);
 
@@ -1286,7 +1248,7 @@ export default function RaceView() {
         }))
       } as Race;
     } catch (error) {
-      console.error('Error fetching completed race results:', error);
+      toast.error('Error fetching race results. Please try again.');
       return race;
     }
   };
@@ -1312,7 +1274,6 @@ export default function RaceView() {
         }))
       });
     } catch (error) {
-      console.error('Error handling view results:', error);
       toast.error('Failed to load race results. Please try again.');
     }
   };
@@ -1370,10 +1331,7 @@ export default function RaceView() {
             {raceSizeOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => {
-                  console.log('Setting selected race size to:', option.value);
-                  setSelectedRaceSize(option.value);
-                }}
+                onClick={() => setSelectedRaceSize(option.value)}
                 className={`px-4 py-2 rounded-lg transition-all relative ${
                   selectedRaceSize === option.value
                     ? 'bg-purple-500/20 border border-purple-500/50 text-purple-300'

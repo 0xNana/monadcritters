@@ -198,14 +198,11 @@ export default function MintingPage() {
       }, 30000)
 
     } catch (error: any) {
-      console.error('Failed to mint:', error)
-      
       // Handle user rejection
       if (error?.message?.includes('User rejected') || 
           error?.code === 'ACTION_REJECTED' ||
           error?.message?.includes('User denied') ||
           error?.message?.includes('rejected transaction')) {
-        console.log('User rejected the transaction')
         setMintingState('failed')
         setErrorMessage('Transaction was rejected. Please try again when ready.')
         
@@ -243,34 +240,25 @@ export default function MintingPage() {
     eventName: 'Transfer',
     enabled: mintingState === 'minting',
     onLogs(logs) {
-      console.log('Transfer event detected:', logs);
-      
-      // Clear any existing timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
       // Check if the event is for our address
       const ourEvent = logs.find(log => 
         log.args.to?.toLowerCase() === address?.toLowerCase()
       )
       if (ourEvent) {
-        console.log('Transfer event detected for our address:', ourEvent);
         // Only update if we're still in minting state
         if (mintingState === 'minting') {
-          console.log('Transitioning to success state from Transfer event');
           setMintingState('success');
           setNewTokenId(ourEvent.args.tokenId ? ourEvent.args.tokenId.toString() : null);
         
           // Set a timeout before navigating to lobby
-        timeoutRef.current = setTimeout(() => {
+          timeoutRef.current = setTimeout(() => {
             setIsMinted(true);
           }, 3000);
         }
       }
     },
     onError: (error) => {
-      console.error('Error watching Transfer events:', error);
+      setErrorMessage('Error processing transfer event. Please check your wallet for status.');
     },
   });
 
@@ -281,24 +269,15 @@ export default function MintingPage() {
     eventName: 'CritterMinted',
     enabled: mintingState === 'minting',
     onLogs(logs) {
-      console.log('CritterMinted event detected:', logs);
-      
-      // Clear any existing timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
       // Check if the event is for our address
       const ourEvent = logs.find(log => 
         log.args.owner?.toLowerCase() === address?.toLowerCase()
       )
       if (ourEvent && ourEvent.args.stats) {
-        console.log('CritterMinted event for our address with stats:', ourEvent.args.stats);
         setMintedStats(ourEvent.args.stats);
         
         // Only update if we're still in minting state
         if (mintingState === 'minting') {
-          console.log('Transitioning to success state from CritterMinted event');
           setMintingState('success');
           setNewTokenId(ourEvent.args.tokenId ? ourEvent.args.tokenId.toString() : null);
           
@@ -310,7 +289,7 @@ export default function MintingPage() {
       }
     },
     onError: (error) => {
-      console.error('Error watching CritterMinted events:', error);
+      setErrorMessage('Error processing minting event. Please check your wallet for status.');
     }
   });
 
@@ -318,12 +297,9 @@ export default function MintingPage() {
   useEffect(() => {
     if (!publicClient || !address || mintingState !== 'minting') return;
     
-    console.log('Setting up fallback checks for minting state');
-    
     // Check after 15 seconds first
     const quickCheck = setTimeout(async () => {
       if (mintingState === 'minting') {
-        console.log('Quick check triggered - checking if mint was successful');
         try {
           const currentMints = await publicClient.readContract({
             address: CRITTER_CONTRACT_ADDRESS,
@@ -333,14 +309,13 @@ export default function MintingPage() {
           });
           
           if (currentMints > mintsUsed) {
-            console.log('Quick check: Mint count increased, transitioning to success state');
             setMintingState('success');
             timeoutRef.current = setTimeout(() => {
               setIsMinted(true);
             }, 3000);
           }
         } catch (error) {
-          console.error('Error in quick check:', error);
+          setErrorMessage('Error checking mint status. Please check your wallet.');
         }
       }
     }, 15000);
@@ -348,7 +323,6 @@ export default function MintingPage() {
     // Longer fallback after 45 seconds
     const fallbackTimeout = setTimeout(async () => {
       if (mintingState === 'minting') {
-        console.log('Final fallback triggered - checking if mint was successful');
         try {
           const currentMints = await publicClient.readContract({
             address: CRITTER_CONTRACT_ADDRESS,
@@ -358,13 +332,11 @@ export default function MintingPage() {
           });
           
           if (currentMints > mintsUsed) {
-            console.log('Final check: Mint count increased, transitioning to success state');
             setMintingState('success');
             timeoutRef.current = setTimeout(() => {
               setIsMinted(true);
             }, 3000);
           } else {
-            console.log('No mint count change detected, showing error');
             setMintingState('failed');
             setErrorMessage('Transaction may have failed or is taking too long. Please check your wallet for status.');
             
@@ -374,7 +346,7 @@ export default function MintingPage() {
             }, 5000);
           }
         } catch (error) {
-          console.error('Error in fallback check:', error);
+          setErrorMessage('Error checking mint status. Please check your wallet.');
         }
       }
     }, 45000);

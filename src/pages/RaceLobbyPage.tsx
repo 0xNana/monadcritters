@@ -123,10 +123,7 @@ export default function RaceLobbyPage() {
   // Validate contract address
   useEffect(() => {
     if (!contracts.monad.race) {
-      console.error('Race contract address is not set!');
       toast.error('Configuration error: Race contract address is missing');
-    } else {
-      console.debug('Using race contract:', contracts.monad.race);
     }
   }, []);
   
@@ -166,7 +163,7 @@ export default function RaceLobbyPage() {
           return updated;
         });
       } catch (error) {
-        console.error(`Error refetching races for ${raceType.type}:`, error);
+        toast.error(`Failed to fetch races for ${raceType.type}`);
       }
     }
   }, [address, publicClient, setRaces]);
@@ -237,8 +234,6 @@ export default function RaceLobbyPage() {
       }
 
       try {
-        console.debug('Loading critters for address:', address);
-        
         // Use the getTokensOfOwner function from the contract
         const tokenIds = await publicClient.readContract({
           address: contracts.monad.critter as `0x${string}`,
@@ -255,8 +250,6 @@ export default function RaceLobbyPage() {
           args: [address as `0x${string}`]
         }) as unknown as bigint[];
         
-        console.debug('Found token IDs:', tokenIds);
-        
         if (!tokenIds || tokenIds.length === 0) {
           setUserCritters([]);
           setIsLoadingCritters(false);
@@ -270,7 +263,6 @@ export default function RaceLobbyPage() {
         // If the sets are identical, skip fetching stats
         if (currentIds.size === newIds.size && 
             [...currentIds].every(id => newIds.has(id))) {
-          console.debug('Critters unchanged, skipping update');
           setIsLoadingCritters(false);
           return;
         }
@@ -296,7 +288,7 @@ export default function RaceLobbyPage() {
                 }
               };
             } catch (error) {
-              console.error(`Error fetching stats for critter ${tokenId}:`, error);
+              toast.error(`Failed to fetch stats for critter #${tokenId}`);
               return null;
             }
           })
@@ -309,11 +301,10 @@ export default function RaceLobbyPage() {
         
         // Only update state if there are changes
         if (JSON.stringify(validCritters) !== JSON.stringify(userCritters)) {
-          console.debug('Updating critters state with:', validCritters.length, 'critters');
           setUserCritters(validCritters);
         }
       } catch (error) {
-        console.error('Error loading critters:', error);
+        toast.error('Failed to load your critters');
       } finally {
         setIsLoadingCritters(false);
       }
@@ -456,7 +447,6 @@ export default function RaceLobbyPage() {
     eventName: 'RaceEnded' as const,
     onLogs: async (logs) => {
       try {
-        console.log('Race ended event received:', logs);
         await refetchRaces();
         
         // Navigate to race view if user was in this race
@@ -473,7 +463,7 @@ export default function RaceLobbyPage() {
           }
         }
       } catch (error) {
-        console.error('Error processing race end event:', error);
+        toast.error('Error processing race end event');
       }
     },
     enabled: isConnected // Only watch when connected
@@ -617,15 +607,6 @@ export default function RaceLobbyPage() {
     const effectiveCritterId = critterId ?? selectedCritter;
     const effectiveBoostAmount = boostAmount ?? joinBoostAmount;
 
-    console.log('Join race called with:', {
-      critterId: effectiveCritterId,
-      boostAmount: effectiveBoostAmount,
-      selectedRaceType,
-      selectedRaceForJoin,
-      address,
-      isConnected
-    });
-
     if (!isConnected || !effectiveCritterId || !selectedRaceType || !walletClient || !selectedRaceForJoin || !address || !publicClient) {
       toast.error('Please connect wallet, select a critter, and choose a race type');
       return;
@@ -678,14 +659,6 @@ export default function RaceLobbyPage() {
           throw new Error('Invalid race type');
       }
 
-      console.log('Joining race with params:', {
-        raceId: selectedRaceForJoin.id.toString(),
-        raceTypeIndex,
-        critterId: effectiveCritterId,
-        boostAmount: effectiveBoostAmount,
-        entryFee: BigInt(Math.floor(parseFloat(selectedRaceType.entryFee) * 10**18)).toString()
-      });
-
       // First simulate the transaction
       const { request } = await publicClient.simulateContract({
         address: contracts.monad.race as `0x${string}`,
@@ -693,7 +666,7 @@ export default function RaceLobbyPage() {
         functionName: 'joinRace',
         args: [
           selectedRaceForJoin.id,
-          BigInt(selectedRaceType.raceSize),  // Use raceSize directly from selectedRaceType
+          BigInt(selectedRaceType.raceSize),
           BigInt(effectiveCritterId),
           BigInt(effectiveBoostAmount)
         ],
@@ -735,7 +708,6 @@ export default function RaceLobbyPage() {
       setIsJoinModalOpen(false);
       setShowConfirmation(true);
     } catch (error: any) {
-      console.error('Error joining race:', error);
       let errorMessage = 'Failed to join race';
       if (error.message) {
         if (error.message.includes('user rejected')) {
