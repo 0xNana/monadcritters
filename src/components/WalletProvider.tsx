@@ -23,7 +23,7 @@ const queryClient = new QueryClient()
 // Create Wagmi adapter
 const wagmiAdapter = new WagmiAdapter({
   networks: [monadTestnet],
-  projectId: REOWN_PROJECT_ID,
+  projectId: REOWN_PROJECT_ID
 })
 
 // Initialize AppKit
@@ -41,7 +41,7 @@ createAppKit({
     analytics: false,
     email: false,
     socials: [],
-    emailShowWallets: false // Don't show wallet selection screen
+    emailShowWallets: true // Show all wallet options
   },
   allWallets: 'SHOW' // Show all available wallets
 })
