@@ -32,21 +32,8 @@ export function ConnectButton() {
     setLocalConnected(isConnected);
   }, [address, isConnected]);
   
-  // Debug logging
+  // Watch AppKit state for connection changes
   useEffect(() => {
-    console.debug('ConnectButton state:', { 
-      address, 
-      isConnected, 
-      isConnecting,
-      localAddress,
-      localConnected
-    });
-  }, [address, isConnected, isConnecting, localAddress, localConnected]);
-  
-  // Debug logging for AppKit state
-  useEffect(() => {
-    console.debug('ConnectButton AppKit state:', appKitState);
-    
     // Check for address in AppKit state
     const appKitAddress = 
       (appKitState as any)?.address || 
@@ -61,7 +48,6 @@ export function ConnectButton() {
     
     // If we have an address and the modal is closed, or we have session data, we're likely connected
     if ((appKitAddress && modalClosed) || hasSession) {
-      console.debug('Found address in AppKit state but not connected locally:', appKitAddress);
       setLocalAddress(appKitAddress);
       setLocalConnected(true);
       
@@ -80,8 +66,6 @@ export function ConnectButton() {
   useEffect(() => {
     const handleWalletStateUpdated = (event: any) => {
       const { address: eventAddress, connected } = event.detail;
-      console.debug('ConnectButton received wallet state updated event:', event.detail);
-      
       if (eventAddress && connected) {
         setLocalAddress(eventAddress);
         setLocalConnected(true);
@@ -98,9 +82,7 @@ export function ConnectButton() {
   // Listen for custom AppKit connection events
   useEffect(() => {
     const handleAppKitConnected = (event: any) => {
-      console.debug('ConnectButton received AppKit connected event:', event.detail);
       const { address: eventAddress } = event.detail;
-      
       if (eventAddress) {
         setLocalAddress(eventAddress);
         setLocalConnected(true);

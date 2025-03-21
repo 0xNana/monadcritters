@@ -57,7 +57,6 @@ if (typeof window !== 'undefined') {
        event.message.includes('Failed to execute') ||
        event.message.includes('Invalid target origin'))
     ) {
-      console.warn('AppKit postMessage error suppressed:', event.message);
       // Prevent the error from showing in console
       event.preventDefault();
       event.stopPropagation();
@@ -75,7 +74,6 @@ if (typeof window !== 'undefined') {
        event.reason.message.includes('Failed to execute') ||
        event.reason.message.includes('Invalid target origin'))
     ) {
-      console.warn('AppKit postMessage promise error suppressed:', event.reason.message);
       // Prevent the error from showing in console
       event.preventDefault();
       event.stopPropagation();
@@ -93,8 +91,6 @@ if (typeof window !== 'undefined') {
       
       // Check for connection events
       if (type === '@w3m-app/CONNECTED_ACCOUNT_DATA' && data && data.address) {
-        console.debug('AppKit connection event detected:', data);
-        
         // Dispatch a custom event that our components can listen for
         const customEvent = new CustomEvent('appkit-connected', { 
           detail: { address: data.address, type: data.type || 'unknown' } 
@@ -118,8 +114,6 @@ if (typeof window !== 'undefined') {
               node.src && 
               node.src.includes('contentScript.ts')) {
             
-            console.debug('Detected contentScript.ts loading, applying patch');
-            
             // Add a script to patch the contentScript's postMessage
             const patchScript = document.createElement('script');
             patchScript.textContent = `
@@ -136,13 +130,11 @@ if (typeof window !== 'undefined') {
                         }
                         return originalPostMessage.apply(this, arguments);
                       } catch (e) {
-                        console.warn('Patched postMessage error:', e);
                         return undefined;
                       }
                     };
-                    console.debug('Applied postMessage patch for contentScript.ts');
                   } catch (error) {
-                    console.error('Failed to patch postMessage:', error);
+                    // Silently fail
                   }
                 }, 100);
               })();
@@ -199,14 +191,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       // Check if modal is open - if it's closed and we have an address, we're likely connected
       const modalClosed = (currentState as any)?.open === false;
       
-      console.debug('Aggressive connection check:', { 
-        appKitAddress, 
-        modalClosed,
-        currentState
-      });
-      
       if (appKitAddress && modalClosed) {
-        console.debug('Found address in aggressive check, updating state:', appKitAddress);
         setAddress(appKitAddress);
         setIsConnected(true);
         
@@ -237,9 +222,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         // Get the raw AppKit state object
         const rawState = appKitState as any;
         
-        // Log the complete state for debugging
-        console.debug('AppKit state changed, raw state:', rawState);
-        
         // Check for address in all possible locations
         const possibleAddress = 
           rawState?.address || 
@@ -249,7 +231,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
           rawState?.session?.address;
         
         if (possibleAddress && !isConnected) {
-          console.debug('Found address in AppKit state change, updating:', possibleAddress);
           setAddress(possibleAddress);
           setIsConnected(true);
           
@@ -260,7 +241,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
           window.dispatchEvent(customEvent);
         }
       } catch (error) {
-        console.error('Error in force connection check:', error);
+        // Silently handle error
       }
     };
     
@@ -276,43 +257,32 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         
         // If Wagmi shows connected, use that
         if (account.isConnected && account.address) {
-          console.debug('Found connected Wagmi account on mount:', account);
           setAddress(account.address);
           setIsConnected(true);
           return;
         }
         
-        // Try to get AppKit state directly
-        console.debug('Checking AppKit connection on mount');
-        
         // Force a refresh of the connection state
         const refreshedAccount = getAccount(config);
         if (refreshedAccount.isConnected && refreshedAccount.address) {
-          console.debug('Found connected account after refresh:', refreshedAccount);
           setAddress(refreshedAccount.address);
           setIsConnected(true);
         }
       } catch (error) {
-        console.error('Error checking wallet connection on mount:', error);
+        // Silently handle error
       }
     };
     
     checkConnection();
   }, []);
 
-  // Debug logging for AppKit state
-  useEffect(() => {
-    console.debug('AppKit state updated:', appKitState);
-  }, [appKitState]);
-
   useEffect(() => {
     // Watch for account changes from Wagmi
     const unwatch = watchAccount(config, {
       onChange(account) {
-        console.debug('Wagmi account changed:', account);
         if (account.address) {
-        setAddress(account.address)
-        setIsConnected(account.isConnected)
+          setAddress(account.address)
+          setIsConnected(account.isConnected)
         }
       },
     })
@@ -324,15 +294,11 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   useEffect(() => {
     // More comprehensive check for AppKit connection state
     const appKitConnected = 
-      // Check standard connection property
       (appKitState as any)?.isConnected || 
-      // Check status property
       (appKitState as any)?.status === 'connected' ||
-      // Check for social/email login in data
       ((appKitState as any)?.data?.address && 
        ((appKitState as any)?.data?.type === 'email' || 
         (appKitState as any)?.data?.type === 'social')) ||
-      // Check for open property being false (indicating connected)
       ((appKitState as any)?.open === false && (appKitState as any)?.data?.address);
     
     // Get address from multiple possible locations
@@ -340,20 +306,12 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       (appKitState as any)?.address || 
       (appKitState as any)?.data?.address;
 
-    console.debug('Processing AppKit state:', { 
-      appKitAddress, 
-      appKitConnected,
-      rawState: appKitState 
-    });
-
     // Update connection state if AppKit shows connected
     if (appKitConnected && appKitAddress) {
-      console.debug('AppKit connected with address:', appKitAddress);
       setIsConnected(true);
       setAddress(appKitAddress);
     } else if (appKitConnected === false && !appKitAddress) {
       // Only update if AppKit specifically says we're disconnected
-      console.debug('AppKit disconnected');
       setIsConnected(false);
       setAddress(undefined);
     }
@@ -362,9 +320,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   // Listen for custom AppKit connection events
   useEffect(() => {
     const handleAppKitConnected = (event: any) => {
-      const { address: eventAddress, type } = event.detail;
-      console.debug('AppKit connected event received:', { address: eventAddress, type });
-      
+      const { address: eventAddress } = event.detail;
       if (eventAddress) {
         setAddress(eventAddress);
         setIsConnected(true);
@@ -381,7 +337,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   const connect = async () => {
     try {
       setIsConnecting(true)
-      console.debug('Opening AppKit modal');
       
       // Before opening the modal, check if we're already connected
       const currentState = appKitState as any;
@@ -394,7 +349,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       const sessionAddress = currentState?.session?.namespaces?.eip155?.accounts?.[0]?.split(':')?.[2];
       
       if (existingAddress || sessionAddress) {
-        console.debug('Already connected with address:', existingAddress || sessionAddress);
         setAddress(existingAddress || sessionAddress);
         setIsConnected(true);
         setIsConnecting(false);
@@ -409,12 +363,10 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       const maxAttempts = 10;
       const checkConnection = async () => {
         attempts++;
-        console.debug(`Connection check attempt ${attempts}/${maxAttempts}`);
         
         // Check Wagmi account first
         const account = getAccount(config)
         if (account.address) {
-          console.debug('Found connected account in Wagmi:', account);
           setAddress(account.address)
           setIsConnected(account.isConnected)
           setIsConnecting(false)
@@ -423,7 +375,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         
         // Check AppKit state directly
         const currentAppKitState = appKitState as any;
-        console.debug('Current AppKit state in polling:', currentAppKitState);
         
         // Extract address from various possible locations
         const appKitAddress = 
@@ -438,7 +389,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         const modalClosed = currentAppKitState?.open === false;
         
         if ((appKitAddress && modalClosed) || sessionAddress) {
-          console.debug('Found connected address in AppKit:', appKitAddress || sessionAddress);
           setAddress(appKitAddress || sessionAddress);
           setIsConnected(true);
           setIsConnecting(false);
@@ -449,7 +399,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
           // Try again after a delay
           setTimeout(checkConnection, 1000);
         } else {
-          console.debug('Max connection check attempts reached, giving up');
           setIsConnecting(false);
         }
         
@@ -460,20 +409,18 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       setTimeout(checkConnection, 1000);
       
     } catch (error) {
-      console.error('Failed to connect wallet:', error)
       setIsConnecting(false)
     }
   }
 
   const disconnect = async () => {
     try {
-      console.debug('Disconnecting wallet');
       await wagmiDisconnect(config)
       await appKit.close()
       setAddress(undefined)
       setIsConnected(false)
     } catch (error) {
-      console.error('Failed to disconnect wallet:', error)
+      // Silently handle error
     }
   }
 

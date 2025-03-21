@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useDeployContract, usePublicClient, useSignMessage, useAccount, useWalletClient } from 'wagmi';
 import { parseEther } from 'viem';
 import { toast } from 'react-hot-toast';
@@ -411,4 +411,24 @@ export const useCritters = () => {
   }, [address, contract]);
 
   return { critters, loading, refreshCritters: fetchCritters };
+};
+
+const handleContractError = (error: Error) => {
+  toast.error('Unable to interact with race contract. Please try again.');
+};
+
+const handleCacheError = (error: Error) => {
+  toast.error('Unable to load cached race data. Please refresh the page.');
+};
+
+const handleFetchError = (error: Error) => {
+  toast.error('Unable to fetch race data. Please try again.');
+};
+
+const handlePowerUpError = (error: Error) => {
+  toast.error('Error managing power-ups. Please try again.');
+};
+
+const handleCritterError = (error: Error) => {
+  toast.error('Error fetching critter data. Please try again.');
 };

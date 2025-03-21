@@ -145,11 +145,6 @@ const LeaderboardPage = () => {
   const leaderboard = React.useMemo(() => {
     if (isLoading) return [];
 
-    console.log('Computing leaderboard with races:', {
-      total: processedRaces.length,
-      completed: processedRaces.filter(r => r.hasEnded).length
-    });
-
     const leaderboardService = LeaderboardService.getInstance();
     return leaderboardService.computeLeaderboard(processedRaces, {
       timeRange,
