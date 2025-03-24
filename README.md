@@ -1,30 +1,31 @@
-# ClashOfCritters 🎮
+# Clash Of Critters 🎮
 
 <div align="center">
 
-![ClashOfCritters Logo](public/logo.png)
+![Clash Of Critters Logo](public/apple-touch-icon.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9.5-blue.svg)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
-[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.3.0-blue.svg)](https://tailwindcss.com/)
-[![Monad](https://img.shields.io/badge/Monad-Testnet-purple.svg)](https://monad.xyz)
+[![React](https://reactjs.org/) - UI Library
+[![TailwindCSS](https://tailwindcss.com/) - Styling
+[![Monad](https://monad.xyz) - Blockchain Platform
 
 A blockchain-based game where you can mint, clash, and earn with your critters on the Monad testnet.
 
-[Live Demo](https://clashofcritters.vercel.app) • [Report Bug](https://github.com/yourusername/clashofcritters/issues) • [Request Feature](https://github.com/yourusername/clashofcritters/issues)
+[Live Demo](https://clashofcritters.vercel.app) • [Report Bug](https://github.com/0xNana/monadcritters/issues) • [Request Feature](https://github.com/0xNana/monadcritters/issues)
 
 </div>
 
 ## 🎮 Features
 
-- 🎨 Mint unique Critter NFTs
-- ⚔️ Engage in PvP clashes
-- 💰 Earn rewards through gameplay
-- 👛 Connect with various wallets (MetaMask, WalletConnect, Phantom, Coinbase)
-- 📱 Responsive and modern UI
-- 🔒 Secure wallet integration
-- 🎯 Optimized performance
+- 🎨 **Mint Rare Critters**: Each Critter is a unique NFT with special attributes that determine their clash performance
+- ⚔️ **PvP Clashes**: Enter competitive arenas with 2-10 players in epic battles
+- ⚡ **Power-Up System**: Use Speed Boosts strategically to enhance your performance
+- 💰 **Score-Based Rewards**: Top performers earn bigger rewards based on their clash scores
+- 🏆 **Leaderboard System**: Track your position and prove your Critter's dominance
+- 👛 **Multi-Wallet Support**: Connect with MetaMask, WalletConnect, Phantom, or Coinbase
+- 📱 **Responsive Design**: Modern UI with smooth animations and mobile-friendly interface
+- 🔒 **Secure Integration**: Built with industry-standard Web3 security practices
 
 ## 🚀 Getting Started
 
@@ -81,7 +82,6 @@ A blockchain-based game where you can mint, clash, and earn with your critters o
 - [Phantom](https://phantom.app/)
 - [Coinbase Wallet](https://www.coinbase.com/wallet)
 
-
 ## 🤝 Contributing
 
 Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
@@ -98,7 +98,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 👥 Authors
 
-- Your Name - [@0xNana](https://github.com/0xNana)
+- Dev - [@0xNana](https://github.com/0xNana)
 
 ## 🙏 Acknowledgments
 
@@ -109,6 +109,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📞 Contact
 
-Your Name - [@0xNana](https://github.com/0xNana)
+Author/Dev - [@0xNana](https://github.com/0xNana)
 
 Project Link: [https://github.com/0xNana/monadcritters](https://github.com/0xNana/monadcritters) 
