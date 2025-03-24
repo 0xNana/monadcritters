@@ -1,135 +1,114 @@
-# MonadCritters 🏃‍♂️
+# ClashOfCritters 🎮
 
-MonadCritters is an exciting blockchain-based racing game where players can mint, collect, and race unique creatures called Critters in competitive races to win rewards.
+<div align="center">
 
-## Overview
+![ClashOfCritters Logo](public/logo.png)
 
-MonadCritters combines NFT collecting with competitive racing mechanics. Each Critter is a unique NFT with special racing attributes that determine their performance in races.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-4.9.5-blue.svg)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.3.0-blue.svg)](https://tailwindcss.com/)
+[![Monad](https://img.shields.io/badge/Monad-Testnet-purple.svg)](https://monad.xyz)
 
-### Key Features
+A blockchain-based game where you can mint, clash, and earn with your critters on the Monad testnet.
 
-- **Mint Unique Critters**: Each Critter is an NFT with unique stats:
-  - Speed: Determines base racing speed
-  - Stamina: Affects race endurance
-  - Luck: Influences race variance and outcomes
-  - Rarity: Common, Uncommon, Rare, or Legendary (with multipliers)
+[Live Demo](https://clashofcritters.vercel.app) • [Report Bug](https://github.com/yourusername/clashofcritters/issues) • [Request Feature](https://github.com/yourusername/clashofcritters/issues)
 
-- **Multiple Race Types**:
-  - Two Player Races
-  - Five Player Races
-  - Ten Player Races
-  Each with different entry fees and reward structures
+</div>
 
-- **Power-Up System**:
-  - Speed Boosts: Enhance your Critter's performance
-  - Strategic power-up usage with diminishing returns
-  - Power-ups cost 10% of race entry fee
+## 🎮 Features
 
-- **Reward System**:
-  - Prize pools from entry fees
-  - Multiple winners based on race type
-  - Performance-based reward distribution
-  - Leaderboard tracking
+- 🎨 Mint unique Critter NFTs
+- ⚔️ Engage in PvP clashes
+- 💰 Earn rewards through gameplay
+- 👛 Connect with various wallets (MetaMask, WalletConnect, Phantom, Coinbase)
+- 📱 Responsive and modern UI
+- 🔒 Secure wallet integration
+- 🎯 Optimized performance
 
-### Game Mechanics
-
-#### Racing
-- Races are skill-based competitions where Critters compete based on their stats
-- Race outcomes are determined by:
-  - Base Critter stats (Speed, Stamina, Luck)
-  - Rarity multipliers (1.0x - 1.5x)
-  - Strategic power-up usage
-  - Luck-based variance
-
-#### Scoring System
-- Speed has the highest weight (1.2x)
-- Stamina has standard weight (1.0x)
-- Luck has lower weight (0.8x) but adds variance
-- Rarity multipliers boost overall performance
-- Power-ups provide diminishing returns:
-  - First boost: 20% increase
-  - Second boost: Additional 15% increase
-
-### Getting Started
-
-1. **Connect Wallet**: Use a Web3 wallet to interact with the game
-2. **Mint a Critter**: Get your first Critter to start racing
-3. **Join Races**: Enter races that match your Critter's strengths
-4. **Use Power-ups**: Strategically apply boosts to improve performance
-5. **Win Rewards**: Compete for prizes and climb the leaderboard
-
-### Player Stats
-
-Track your performance with detailed statistics:
-- Total Score
-- Races Participated
-- Wins (First Place Finishes)
-- Total Rewards
-- Best Score
-
-## Technical Stack
-
-- Frontend: React with TypeScript
-- Smart Contracts: Solidity
-- Styling: Modern UI with Framer Motion animations
-- Web3 Integration: Viem/Wagmi
-
-## Development
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js (v16+)
+- Node.js (v16 or higher)
 - npm or yarn
+- A Web3 wallet (MetaMask, WalletConnect, etc.)
 
 ### Installation
 
-```bash
-# Install dependencies
-npm install
+1. Clone the repository
+   ```bash
+   git clone https://github.com/0xnana/monadcritters.git
+   cd clashofcritters
+   ```
 
-# Start development server
-npm run dev
-```
+2. Install dependencies
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
 
-### Building for Production
+3. Set up environment variables
+   ```bash
+   # Create a .env file in the root directory
+   VITE_REOWN_PROJECT_ID=your_project_id_here
+   ```
 
-```bash
-npm run build
-```
+4. Start the development server
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
 
-## Security
+5. Open [http://localhost:5173](http://localhost:5173) in your browser
 
-- Smart contracts follow OpenZeppelin standards
-- Implements Ownable and Pausable patterns
-- Secure reward distribution system
-- Fair and transparent race mechanics
+## 🛠️ Built With
 
-## License
+- [React](https://reactjs.org/) - UI Library
+- [TypeScript](https://www.typescriptlang.org/) - Type Safety
+- [TailwindCSS](https://tailwindcss.com/) - Styling
+- [Wagmi](https://wagmi.sh/) - Ethereum Hooks
+- [AppKit](https://reown.appkit.dev/) - Web3 Integration
+- [Framer Motion](https://www.framer.com/motion/) - Animations
+- [Vite](https://vitejs.dev/) - Build Tool
 
-[MIT](LICENSE)
+## 👛 Wallet Support
 
----
+- [MetaMask](https://metamask.io/)
+- [WalletConnect](https://walletconnect.com/)
+- [Phantom](https://phantom.app/)
+- [Coinbase Wallet](https://www.coinbase.com/wallet)
 
-Built with ❤️ for the Monad ecosystem 
 
-## Wallet Connection Information
+## 🤝 Contributing
 
-### Supported Wallet Types
+Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
-Currently, MonadCritters supports the following wallet connection methods:
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-- MetaMask
-- Other injected wallets (Brave, etc.)
-- WalletConnect (for supported chains)
+## 📝 License
 
-### Known Limitations
+Distributed under the MIT License. See `LICENSE` for more information.
 
-**Social/Email Logins**: Social and email logins are currently disabled because WalletConnect's Cloud infrastructure does not yet officially support Monad testnet (chainId 10143). This is a limitation of the WalletConnect platform, not of the MonadCritters application.
+## 👥 Authors
 
-When WalletConnect adds official support for Monad testnet, we will re-enable these login options.
+- Your Name - [@0xNana](https://github.com/0xNana)
 
-### Connecting Your Wallet
+## 🙏 Acknowledgments
 
-1. Click the "Log In" button in the top right corner
-2. Select your preferred wallet from the options
-3. Follow the prompts to connect your wallet to the application 
+- [Monad](https://monad.xyz) - For the amazing blockchain platform
+- [Reown](https://reown.appkit.dev/) - For the Web3 integration tools
+- [Wagmi](https://wagmi.sh/) - For the Ethereum hooks
+- [TailwindCSS](https://tailwindcss.com/) - For the styling framework
+
+## 📞 Contact
+
+Your Name - [@0xNana](https://github.com/0xNana)
+
+Project Link: [https://github.com/0xNana/monadcritters](https://github.com/0xNana/monadcritters) 
