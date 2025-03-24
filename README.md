@@ -1,16 +1,6 @@
 # Clash Of Critters 🎮
 
-<div align="center">
-
-![Clash Of Critters Logo](public/apple-touch-icon.png)
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-4.9.5-blue.svg)](https://www.typescriptlang.org/)
-[![React](https://reactjs.org/) - UI Library
-[![TailwindCSS](https://tailwindcss.com/) - Styling
-[![Monad](https://monad.xyz) - Blockchain Platform
-
-A blockchain-based game where you can mint, clash, and earn with your critters on the Monad testnet.
+A blockchain based game where you can mint, clash, and earn with your critters on the Monad testnet.
 
 [Live Demo](https://clashofcritters.vercel.app) • [Report Bug](https://github.com/0xNana/monadcritters/issues) • [Request Feature](https://github.com/0xNana/monadcritters/issues)
 
