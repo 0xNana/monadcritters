@@ -130,8 +130,8 @@ export const RaceCard: React.FC<RaceCardProps> = ({
         {isRaceActive && (
           <div className="mt-2 text-center">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400">
-              <span className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
-              Clash in Progress
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1.5 animate-ping"></span>
+              Live
             </span>
           </div>
         )}

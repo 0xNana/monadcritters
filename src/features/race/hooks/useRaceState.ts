@@ -329,7 +329,7 @@ export const usePowerUps = () => {
   const buyPowerUps = async (amount: number) => {
     if (!walletClient) throw new Error('Wallet not connected');
 
-    const cost = parseEther('0.01') * BigInt(amount); // Assuming 0.01 ETH per power-up
+    const cost = parseEther('0.01') * BigInt(amount); 
     return wrapWithErrorHandler(
       walletClient.writeContract({
         ...contract,

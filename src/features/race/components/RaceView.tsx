@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveRaces, useRaceInfo, useRaceEvents } from '../../../contracts/CritterRace/hooks';
 import { useRaceProgress } from '../hooks/useRaceProgress';
@@ -530,9 +530,7 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
     <div className="flex flex-col items-center space-y-2">
       {isCountdownActive && (
         <>
-          <div className="text-lg font-semibold text-white">
-            Clash starts in: {Math.ceil(timeLeft / 1000)}s
-          </div>
+          <CountdownTimer startTime={BigInt(Math.floor(race.startTime!.getTime() / 1000))} />
           <div className="w-full bg-gray-600/50 rounded-full h-3">
             <motion.div 
               className="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full"
@@ -578,12 +576,211 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
                 : "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white hover:shadow-red-500/25 cursor-pointer"
           }`}
         >
-          {isProcessingRace ? 'Processing...' : isCountdownActive ? 'Countdown in progress...' : isRaceInProgress ? 'Clash in progress...' : isComplete ? 'End Clash' : 'Clash in progress...'}
+          {isProcessingRace ? 'Processing...' : isCountdownActive ? 'Starting in...' : isRaceInProgress ? 'Clash in progress...' : isComplete ? 'End clash to view results' : 'Clash in progress...'}
         </motion.button>
       )}
     </div>
   );
 };
+
+// Add this before the RaceView component
+const RaceCard = memo(({ 
+  race, 
+  onEndRace, 
+  onViewResults, 
+  isProcessingRace, 
+  address,
+  canStartRace,
+  onStartRace
+}: { 
+  race: Race;
+  onEndRace: (raceId: bigint) => void;
+  onViewResults: (race: Race) => void;
+  isProcessingRace: boolean;
+  address?: `0x${string}`;
+  canStartRace: (race: Race) => { enabled: boolean; tooltip: string };
+  onStartRace: (raceId: bigint) => void;
+}) => {
+  const isUserParticipant = useCallback(() => {
+    if (!address || !race.players) return false;
+    return race.players.some(player => 
+      player.toLowerCase() === address.toLowerCase()
+    );
+  }, [address, race.players]);
+
+  return (
+    <motion.div
+      key={race.id.toString()}
+      whileHover={{ scale: 1.02 }}
+      className="bg-gray-700/50 rounded-lg p-6 border border-gray-600/50 hover:border-purple-500/50 transition-all"
+    >
+      <div className="flex justify-between items-center mb-4">
+        <span className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+          Clash #{race.id.toString()}
+        </span>
+        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+          race.hasEnded 
+            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50'
+            : race.progressStatus === 'clashing'
+            ? 'bg-green-500/20 text-green-300 border border-green-500/50'
+            : 'bg-blue-500/20 text-blue-300 border border-blue-500/50'
+        }`}>
+          {race.hasEnded ? 'Completed' : race.progressStatus === 'clashing' ? 'In Progress' : 'Ready'}
+        </span>
+      </div>
+
+      <div className="space-y-2 mb-4">
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">Players</span>
+          <span className={`font-medium ${
+            race.currentPlayers === race.size 
+              ? 'text-green-400' 
+              : 'text-yellow-400'
+          }`}>
+            {race.currentPlayers}/{race.size}
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">Status</span>
+          <span className={`font-medium ${
+            race.hasEnded 
+              ? 'text-purple-400'
+              : race.progressStatus === 'clashing'
+              ? 'text-green-400'
+              : race.progressStatus === 'complete'
+              ? 'text-yellow-400'
+              : 'text-blue-400'
+          }`}>
+            {race.hasEnded 
+              ? 'Clash Complete'
+              : race.progressStatus === 'clashing'
+              ? 'In Progress'
+              : race.progressStatus === 'complete'
+              ? 'Ready to End'
+              : 'Waiting to Start'}
+          </span>
+        </div>
+        {race.startTime && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Started</span>
+            <span className="font-medium text-blue-400" data-race-time={race.startTime.getTime()}>
+              {formatTimeSpan(race.startTime)}
+            </span>
+          </div>
+        )}
+        {race.hasEnded && race.endTime && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Ended</span>
+            <span className="font-medium text-purple-400" data-race-time={race.endTime.getTime()}>
+              {formatTimeSpan(race.endTime)}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {race.status === RaceStatus.Active && (
+        <div className="mt-4">
+          {race.progressStatus === 'ready' ? (
+            <div className="relative group">
+              <motion.button
+                whileHover={{ scale: canStartRace(race).enabled ? 1.05 : 1 }}
+                whileTap={{ scale: canStartRace(race).enabled ? 0.95 : 1 }}
+                onClick={() => canStartRace(race).enabled && onStartRace(race.id)}
+                disabled={!canStartRace(race).enabled || isProcessingRace}
+                className={`w-full px-4 py-2 rounded-lg transform transition-all shadow-lg ${
+                  isProcessingRace 
+                    ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                    : canStartRace(race).enabled 
+                      ? "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:shadow-green-500/25 cursor-pointer" 
+                      : "bg-gray-600 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                {isProcessingRace ? 'Processing...' : 'Start Clash'}
+              </motion.button>
+              {!canStartRace(race).enabled && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+                  {canStartRace(race).tooltip}
+                </div>
+              )}
+            </div>
+          ) : race.progressStatus === 'clashing' ? (
+            <div className="space-y-3">
+              {race.startTime && (
+                <RaceProgress
+                  race={race}
+                  onEndRace={onEndRace}
+                  isProcessingRace={isProcessingRace}
+                  isUserParticipant={isUserParticipant()}
+                />
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {race.status === RaceStatus.Completed && race.results && (
+        <div className="mt-4 space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
+              Results
+            </h3>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => onViewResults(race)}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white text-sm rounded-lg transform transition-all shadow-lg hover:shadow-purple-500/25"
+            >
+              View Clash Results
+            </motion.button>
+          </div>
+          {race.results.slice(0, 3).map((player, index) => (
+            <div 
+              key={player.player}
+              className={`flex justify-between items-center p-2 rounded ${
+                player.player.toLowerCase() === address?.toLowerCase()
+                  ? 'bg-purple-500/20 border border-purple-500/50' 
+                  : 'bg-gray-600/30'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <span className={`text-sm ${
+                  index === 0 ? 'text-yellow-400' :
+                  index === 1 ? 'text-gray-400' :
+                  index === 2 ? 'text-amber-600' :
+                  'text-gray-300'
+                }`}>
+                  #{index + 1}
+                </span>
+                <span className="text-gray-300 truncate">
+                  {player.player.slice(0, 6)}...{player.player.slice(-4)}
+                </span>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-medium text-gray-200">
+                  {player.score.toString()} pts
+                </div>
+                {player.reward > BigInt(0) && (
+                  <div className="text-xs text-green-400">
+                    +{formatUnits(player.reward.toString(), 18)} MON
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison function for memo
+  return (
+    prevProps.race.id === nextProps.race.id &&
+    prevProps.race.progressStatus === nextProps.race.progressStatus &&
+    prevProps.race.hasEnded === nextProps.race.hasEnded &&
+    prevProps.isProcessingRace === nextProps.isProcessingRace &&
+    prevProps.address === nextProps.address
+  );
+});
 
 export default function RaceView() {
   const navigate = useNavigate();
@@ -773,7 +970,10 @@ export default function RaceView() {
     return () => clearInterval(interval);
   }, [races]);
 
-  // Update the handleStartRace function to use our logger
+  // Add this near other hook calls at the component level
+  const { refetch: refetchRaceInfo } = useRaceInfo(selectedRace?.id);
+
+  // Update the handleStartRace function
   const handleStartRace = async (raceId: bigint) => {
     try {
       setIsProcessingStartRace(true);
@@ -785,10 +985,11 @@ export default function RaceView() {
       // Optimistically update the race status
       const updatedRace = races.find(r => r.id === raceId);
       if (updatedRace) {
+        const startTime = new Date(Date.now() + 5000); // Add 5 seconds for countdown
         const optimisticRace = {
           ...updatedRace,
           progressStatus: 'clashing' as const,
-          startTime: new Date(),
+          startTime,
           hasEnded: false
         };
         
@@ -833,9 +1034,8 @@ export default function RaceView() {
       // Clear the interval if it's still running
       clearInterval(progressInterval);
       
-      // Only refresh the specific race that started
-      const { refetch } = useRaceInfo(raceId);
-      await refetch();
+      // Refetch the race info
+      await refetchRaceInfo();
       
     } catch (error) {
       logger.error('Failed to start race:', error);
@@ -863,6 +1063,18 @@ export default function RaceView() {
       setProcessingRaceId(raceId);
       const endTime = new Date();
       
+      // Show loading state in results modal immediately
+      const currentRace = races.find(r => r.id === raceId);
+      if (currentRace) {
+        setSelectedResultsRace({
+          ...currentRace,
+          hasEnded: true,
+          endTime,
+          progressStatus: 'complete' as const,
+          results: [] // Empty results while loading
+        });
+      }
+
       // Optimistically update the race status
       const updatedRace = races.find(r => r.id === raceId);
       if (updatedRace) {
@@ -883,19 +1095,39 @@ export default function RaceView() {
         setOrganizedRaces(organized);
       }
 
+      // Call the contract to end the race
       await endRaceAction(Number(raceId));
       
-      // Only refresh the specific race that ended
-      const { refetch } = useRaceInfo(raceId);
-      await refetch();
-      
-      // Fetch results for the ended race
-      const leaderboardResults = await getRaceResults(raceId, publicClient);
+      // Fetch results for the ended race with retries
+      let retryCount = 0;
+      const maxRetries = 5;
+      let leaderboardResults;
+
+      while (retryCount < maxRetries) {
+        try {
+          leaderboardResults = await getRaceResults(raceId, publicClient);
+          if (leaderboardResults && leaderboardResults.length > 0) break;
+          
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between retries
+          }
+        } catch (error) {
+          console.error('Error fetching results, attempt ${retryCount + 1}:', error);
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
       
       // Update the race with results
-      if (updatedRace) {
+      if (updatedRace && leaderboardResults) {
         const raceWithResults = {
           ...updatedRace,
+          hasEnded: true,
+          endTime,
+          progressStatus: 'complete' as const,
           results: leaderboardResults.map(entry => ({
             player: entry.player as `0x${string}`,
             position: entry.position,
@@ -905,7 +1137,9 @@ export default function RaceView() {
         };
         
         setSelectedResultsRace(raceWithResults);
-        toast.success('Clash completed! View your results.');
+        toast.success('Clash completed! Viewing results...');
+      } else {
+        toast.error('Could not fetch clash results. Please check the history tab.');
       }
       
     } catch (error) {
@@ -919,6 +1153,9 @@ export default function RaceView() {
         );
         const organized = organizeRacesBySize(updatedRaces);
         setOrganizedRaces(organized);
+        
+        // Close the results modal on error
+        setSelectedResultsRace(null);
       }
     } finally {
       setIsProcessingRace(false);
@@ -1422,140 +1659,18 @@ export default function RaceView() {
                 <span className="ml-3 text-gray-300">Processing clash...</span>
               </div>
             ) : filteredActiveRaces.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredActiveRaces.map((race) => (
-                  <motion.div
+                  <RaceCard
                     key={race.id.toString()}
-                    whileHover={{ scale: 1.02 }}
-                    className="bg-gray-700/50 rounded-lg p-6 border border-gray-600/50 hover:border-purple-500/50 transition-all"
-                  >
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                        Clash #{race.id.toString()}
-                      </span>
-                      <span className={`px-3 py-1 rounded-full text-sm ${
-                        race.status === RaceStatus.Active
-                      ? 'bg-green-500/20 text-green-300'
-                          : 'bg-blue-500/20 text-blue-300'
-                }`}>
-                        {race.status}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 mb-4">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Players</span>
-                        <span className="text-gray-200">{race.currentPlayers}/{race.size}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Status</span>
-                        <span className="text-gray-200">{race.progressStatus || 'Waiting'}</span>
-                      </div>
-                      {race.startTime && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Started</span>
-                          <span className="text-gray-200">{formatTimeSpan(race.startTime)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {race.status === RaceStatus.Active && (
-                      <div className="mt-4">
-                        {race.progressStatus === 'ready' ? (
-                          <div className="relative group">
-                            <motion.button
-                              whileHover={{ scale: canStartRace(race).enabled ? 1.05 : 1 }}
-                              whileTap={{ scale: canStartRace(race).enabled ? 0.95 : 1 }}
-                              onClick={() => canStartRace(race).enabled && handleStartRace(race.id)}
-                              disabled={!canStartRace(race).enabled || isProcessingRace}
-                              className={`w-full px-4 py-2 rounded-lg transform transition-all shadow-lg ${
-                                isProcessingRace 
-                                  ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                                  : canStartRace(race).enabled 
-                                    ? "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:shadow-green-500/25 cursor-pointer" 
-                                    : "bg-gray-600 text-gray-400 cursor-not-allowed"
-                              }`}
-                            >
-                              {isProcessingRace ? 'Processing...' : 'Start Clash'}
-                            </motion.button>
-                            {!canStartRace(race).enabled && (
-                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                              {canStartRace(race).tooltip}
-                            </div>
-                          )}
-                          </div>
-                        ) : race.progressStatus === 'clashing' ? (
-                          <div className="space-y-3">
-                            {race.startTime && (
-                              <RaceProgress
-                                race={race}
-                                onEndRace={handleEndRace}
-                                isProcessingRace={isProcessingRace}
-                                isUserParticipant={isUserParticipant(race)}
-                              />
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {race.status === RaceStatus.Completed && race.results && (
-                      <div className="mt-4 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <h3 className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-                            Results
-                          </h3>
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handleViewResults(race)}
-                            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white text-sm rounded-lg transform transition-all shadow-lg hover:shadow-purple-500/25"
-                          >
-                            View Clash Results
-                          </motion.button>
-                        </div>
-                        {race.results.slice(0, 3).map((player, index) => (
-                          <div 
-                            key={player.player}
-                            className={`flex justify-between items-center p-2 rounded ${
-                              player.player.toLowerCase() === address?.toLowerCase()
-                                ? 'bg-purple-500/20 border border-purple-500/50' 
-                                : 'bg-gray-600/30'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-2">
-                              <span className={`text-sm ${
-                                index === 0 ? 'text-yellow-400' :
-                                index === 1 ? 'text-gray-400' :
-                                index === 2 ? 'text-amber-600' :
-                                'text-gray-300'
-                              }`}>
-                                #{index + 1}
-                              </span>
-                              <span className="text-gray-300 truncate">
-                                {player.player.slice(0, 6)}...{player.player.slice(-4)}
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-medium text-gray-200">
-                                {player.score.toString()} pts
-                              </div>
-                              {player.reward > BigInt(0) && (
-                                <div className="text-xs text-green-400">
-                                  +{formatUnits(player.reward.toString(), 18)} MON
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                        {race.results.length > 3 && (
-                          <div className="text-center text-sm text-gray-400 mt-2">
-                            Click "View Results" to see all {race.results.length} players
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </motion.div>
+                    race={race}
+                    onEndRace={handleEndRace}
+                    onViewResults={handleViewResults}
+                    isProcessingRace={isProcessingRace}
+                    address={address}
+                    canStartRace={canStartRace}
+                    onStartRace={handleStartRace}
+                  />
                 ))}
               </div>
             ) : (
@@ -1609,7 +1724,7 @@ export default function RaceView() {
             </div>
             
             {filteredHistory.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredHistory.map(race => (
                   <motion.div
                     key={race.id.toString()}
