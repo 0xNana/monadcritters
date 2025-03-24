@@ -27,38 +27,54 @@ const wagmiAdapter = new WagmiAdapter({
 })
 
 // Initialize AppKit
-createAppKit({
+const appKit = createAppKit({
   adapters: [wagmiAdapter],
   networks: [monadTestnet],
+  projectId: REOWN_PROJECT_ID,
   metadata: {
     name: 'Clash Of Critters',
     description: 'Clash with your critters on Monad testnet!',
     url: window.location.origin || 'https://clashofcritters.com',
     icons: [window.location.origin + '/logo.png' || 'https://clashofcritters.com/logo.png'],
   },
-  projectId: REOWN_PROJECT_ID,
   features: {
-    analytics: false,
-    email: false,
-    socials: [],
+    email: true,
+    socials: ['google', 'x', 'github', 'discord'],
     emailShowWallets: true
-  },
-  allWallets: 'SHOW',
-  includeWalletIds: [],
-  excludeWalletIds: []
+  }
 })
 
-// Add WalletConnect specific event listener
+// Add WalletConnect and mobile wallet specific event listeners
 if (typeof window !== 'undefined') {
+  // Handle mobile wallet detection
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isInAppBrowser = window.ethereum && (
+    window.ethereum.isMetaMask ||
+    window.ethereum.isCoinbaseWallet ||
+    window.ethereum.isPhantom ||
+    window.ethereum.isTrust
+  );
+
+  // Set mobile-specific metadata
+  if (isMobile) {
+    window.localStorage.setItem('wallet-preference', 'mobile');
+    if (isInAppBrowser) {
+      window.localStorage.setItem('preferred-wallet', 'injected');
+    }
+  }
+
+  // Listen for wallet events
   window.addEventListener('message', (event) => {
     if (event.data && typeof event.data === 'object') {
       // Handle WalletConnect QR code scan events
       if (event.data.type === 'walletconnect_modal_closed') {
         console.debug('WalletConnect modal closed');
       }
+      
       // Handle WalletConnect connection events
       if (event.data.type === '@w3m-app/CONNECTED_ACCOUNT_DATA' || 
-          event.data.type === 'walletconnect_connection_success') {
+          event.data.type === 'walletconnect_connection_success' ||
+          event.data.type === 'wallet_connection_success') {
         const address = event.data.data?.address || event.data.address;
         const walletType = event.data.data?.type || 'walletconnect';
         
@@ -68,7 +84,9 @@ if (typeof window !== 'undefined') {
               address,
               connected: true,
               type: walletType,
-              provider: event.data.data?.provider || 'walletconnect'
+              provider: event.data.data?.provider || 'walletconnect',
+              isMobile,
+              isInAppBrowser
             }
           });
           window.dispatchEvent(customEvent);
@@ -76,6 +94,14 @@ if (typeof window !== 'undefined') {
       }
     }
   });
+
+  // Handle in-app browser detection
+  if (isInAppBrowser) {
+    console.debug('Detected in-app browser wallet');
+    window.dispatchEvent(new CustomEvent('in-app-browser-detected', {
+      detail: { provider: window.ethereum }
+    }));
+  }
 }
 
 // Add a more targeted fix for the contentScript.ts postMessage error
@@ -181,7 +207,6 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [walletType, setWalletType] = useState<string>()
-  const appKit = useAppKit()
   const appKitState = useAppKitState()
 
   // Add wallet type to the context

@@ -209,7 +209,7 @@ export function ConnectButton() {
 
   // Get wallet name for display
   const getWalletName = () => {
-    if (!walletType) return 'Connected'
+    if (!walletType) return '';  // Remove 'Connected' default text
     return walletType.charAt(0).toUpperCase() + walletType.slice(1).toLowerCase()
   }
 
@@ -229,7 +229,7 @@ export function ConnectButton() {
     <div className="relative">
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
       >
         <div className="w-6 h-6 rounded-full bg-purple-500/20 p-0.5">
           <img
@@ -238,14 +238,9 @@ export function ConnectButton() {
             className="w-full h-full rounded-full"
           />
         </div>
-        <div className="flex flex-col items-start">
-          <span className="text-sm font-medium text-white">
-            {effectiveAddress ? `${effectiveAddress.slice(0, 4)}...${effectiveAddress.slice(-4)}` : 'Connected'}
-          </span>
-          <span className="text-xs text-gray-400">
-            {getWalletName()}
-          </span>
-        </div>
+        <span className="text-sm font-medium text-white">
+          {effectiveAddress ? `${effectiveAddress.slice(0, 4)}...${effectiveAddress.slice(-4)}` : ''}
+        </span>
       </button>
 
       <WalletDropdown
