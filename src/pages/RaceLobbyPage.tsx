@@ -123,7 +123,7 @@ export default function RaceLobbyPage() {
   // Validate contract address
   useEffect(() => {
     if (!contracts.monad.race) {
-      toast.error('Configuration error: Race contract address is missing');
+      toast.error('Configuration error: Clash contract address is missing');
     }
   }, []);
   
@@ -537,7 +537,7 @@ export default function RaceLobbyPage() {
     }
 
     if (value > 2) {
-      toast.error('Maximum 2 speed boosts per race!');
+      toast.error('Maximum 2 speed boosts per clash!');
       return;
     }
 
@@ -569,7 +569,7 @@ export default function RaceLobbyPage() {
     
     const raceData = races.get(raceType.type);
     if (!raceData) {
-      toast.error('Race not found');
+      toast.error('Clash not found');
       return;
     }
 
@@ -581,20 +581,12 @@ export default function RaceLobbyPage() {
     );
 
     if (availableRaces.length === 0) {
-      toast.error('No available races to join. Try creating a new race!');
+      toast.error('No available clashes to join. Try creating a new clash!');
       return;
     }
 
     // Select the first available race
     const raceToJoin = availableRaces[0];
-    
-    console.log('Selected race for joining:', {
-      raceId: raceToJoin.id.toString(),
-      isActive: raceToJoin.isActive,
-      hasEnded: raceToJoin.hasEnded,
-      currentPlayers: raceToJoin.players.filter(p => p !== '0x0000000000000000000000000000000000000000').length,
-      maxPlayers: raceType.maxPlayers
-    });
     
     setSelectedRaceType(raceType);
     setSelectedRaceForJoin(raceToJoin);
@@ -608,13 +600,13 @@ export default function RaceLobbyPage() {
     const effectiveBoostAmount = boostAmount ?? joinBoostAmount;
 
     if (!isConnected || !effectiveCritterId || !selectedRaceType || !walletClient || !selectedRaceForJoin || !address || !publicClient) {
-      toast.error('Please connect wallet, select a critter, and choose a race type');
+      toast.error('Please connect wallet, select a critter, and choose a clash type');
       return;
     }
 
     // Check if race has ended
     if (selectedRaceForJoin.hasEnded) {
-      toast.error('This race has already ended');
+      toast.error('This clash has already ended');
       setIsJoinModalOpen(false);
       return;
     }
@@ -622,7 +614,7 @@ export default function RaceLobbyPage() {
     // Check if race is already full
     const playerCount = selectedRaceForJoin.players.filter(p => p !== '0x0000000000000000000000000000000000000000').length;
     if (playerCount >= selectedRaceType.maxPlayers) {
-      toast.error('This race is already full');
+      toast.error('This clash is already full');
       setIsJoinModalOpen(false);
       return;
     }
@@ -635,12 +627,12 @@ export default function RaceLobbyPage() {
 
     // Validate boost amount
     if (effectiveBoostAmount > 2) {
-      toast.error('Maximum 2 speed boosts per race!');
+      toast.error('Maximum 2 speed boosts per clash!');
       return;
     }
 
     setIsJoiningRace(true);
-    const toastId = toast.loading('Preparing to join race...');
+    const toastId = toast.loading('Preparing to join clash...');
 
     try {
       // Get race type index based on max players
@@ -656,7 +648,7 @@ export default function RaceLobbyPage() {
           raceTypeIndex = 3; // RaceSize.Ten
           break;
         default:
-          throw new Error('Invalid race type');
+          throw new Error('Invalid clash type');
       }
 
       // First simulate the transaction
@@ -704,16 +696,16 @@ export default function RaceLobbyPage() {
       // Trigger a refetch of speed boosts to ensure sync with contract
       await refetchSpeedBoosts();
 
-      toast.success('Successfully joined race!', { id: toastId });
+      toast.success('Successfully joined clash!', { id: toastId });
       setIsJoinModalOpen(false);
       setShowConfirmation(true);
     } catch (error: any) {
-      let errorMessage = 'Failed to join race';
+      let errorMessage = 'Failed to join clash';
       if (error.message) {
         if (error.message.includes('user rejected')) {
           errorMessage = 'Transaction was rejected';
         } else if (error.message.includes('execution reverted')) {
-          errorMessage = 'Failed to join race: Contract execution reverted';
+          errorMessage = 'Failed to join clash: Contract execution reverted';
         }
       }
       toast.error(errorMessage, { id: toastId });
@@ -729,7 +721,7 @@ export default function RaceLobbyPage() {
       return;
     }
 
-    const toastId = toast.loading('Creating new race...');
+    const toastId = toast.loading('Creating new clash...');
     
     try {
       // Use the raceSize property directly from the race type
@@ -766,7 +758,7 @@ export default function RaceLobbyPage() {
 
       toast.success(
         <div>
-          Successfully created a new {raceType.maxPlayers}-player race!
+          Successfully created a new {raceType.maxPlayers}-player clash!
           <br />
           <a 
             href={`https://testnet.monadexplorer.com/tx/${hash}`} 
@@ -781,9 +773,9 @@ export default function RaceLobbyPage() {
       );
 
     } catch (error) {
-      console.error('Error creating race:', error);
+      console.error('Error creating clash:', error);
       toast.error(
-        error instanceof Error ? error.message : 'Failed to create race',
+        error instanceof Error ? error.message : 'Failed to create clash',
         { id: toastId }
       );
     }
@@ -926,7 +918,7 @@ export default function RaceLobbyPage() {
               className="text-3xl font-bold mb-2"
             >
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500 drop-shadow-[0_0_15px_rgba(34,197,94,0.3)]">
-                Race Entry Confirmed!
+                Clash Entry Confirmed!
               </span>
             </motion.h2>
             
@@ -951,7 +943,7 @@ export default function RaceLobbyPage() {
                 <span className="text-blue-400 font-semibold">
                   {selectedRaceType?.type}
                 </span>{' '}
-                race!
+                clash!
               </p>
             </motion.div>
             
@@ -974,7 +966,7 @@ export default function RaceLobbyPage() {
                   <span className="text-gray-400">Max Potential Winnings</span>
                   <div className="text-right">
                     <span className="text-green-400 font-bold text-lg">{maxPotentialWinnings} MON</span>
-                    <div className="text-xs text-gray-500">Based on full race</div>
+                    <div className="text-xs text-gray-500">Based on full clash</div>
                   </div>
                 </div>
                 
@@ -995,7 +987,7 @@ export default function RaceLobbyPage() {
                 
                 {/* Race Size */}
                 <div className="flex justify-between items-center p-2 rounded-lg bg-gray-800/50">
-                  <span className="text-gray-400">Race Size</span>
+                  <span className="text-gray-400">Clash Size</span>
                   <div className="flex items-center space-x-2">
                     <span className="text-white font-medium">{selectedRaceType?.maxPlayers} Players</span>
                     <span className="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300">
@@ -1019,7 +1011,7 @@ export default function RaceLobbyPage() {
                 onClick={() => navigate('/race')}
                 className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl transform transition-all shadow-lg hover:shadow-green-500/25 font-medium text-lg"
               >
-                Go to Race View
+                Go to Clash View
               </motion.button>
               
               <motion.button
@@ -1028,7 +1020,7 @@ export default function RaceLobbyPage() {
                 onClick={() => setShowConfirmation(false)}
                 className="w-full px-6 py-3 bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/30 hover:to-blue-500/30 text-white rounded-xl transform transition-all border border-purple-500/30 hover:border-purple-500/50 font-medium"
               >
-                Join Another Race
+                Join Another Clash
               </motion.button>
             </motion.div>
           </div>
@@ -1128,10 +1120,10 @@ export default function RaceLobbyPage() {
           >
             <h1 className="text-4xl sm:text-5xl font-bold mb-2">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 animate-text-shimmer">
-                Race Lobby
+                Clash Lobby
               </span>
             </h1>
-            <p className="text-gray-300 text-lg">Join or create races and compete with your Critters</p>
+            <p className="text-gray-300 text-lg">Join or create clashes and compete with your Critters</p>
           </motion.div>
           
           {/* Speed Boost Purchase */}
@@ -1142,10 +1134,10 @@ export default function RaceLobbyPage() {
             className="mb-8 bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50"
           >
             <h2 className="text-xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-              Purchase Speed Boosts
+              Purchase Energy Boosts
             </h2>
             <p className="text-gray-400 mb-4">
-              Speed boosts give you an advantage in races. Each boost costs 0.01 MON and adds +100 to your final race score.
+              Energy boosts give you an advantage in clashes. Each boost costs 0.01 MON and adds +100 to your final clash score.
             </p>
             
             <div className="flex flex-col md:flex-row items-center gap-4">
@@ -1187,7 +1179,7 @@ export default function RaceLobbyPage() {
                     : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-purple-500/25'
                 }`}
               >
-                {isPurchasingBoost ? 'Purchasing...' : 'Purchase Boosts'}
+                {isPurchasingBoost ? 'Purchasing...' : 'Purchase Energy Boosts'}
               </motion.button>
             </div>
           </motion.div>
@@ -1295,7 +1287,7 @@ export default function RaceLobbyPage() {
             className="mb-8"
           >
             <h2 className="text-xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-              Available Races
+              Available Clashes
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1312,7 +1304,6 @@ export default function RaceLobbyPage() {
                 setJoinBoostAmount(0);
               }}
               onJoin={async (critterId, boostAmount) => {
-                console.log('RaceJoinModal onJoin called with:', { critterId, boostAmount });
                 // Call handleJoinRace with the values directly instead of relying on state
                 const parsedCritterId = parseInt(critterId);
                 await handleJoinRace(parsedCritterId, boostAmount);

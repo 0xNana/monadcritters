@@ -10,7 +10,7 @@ const getAvatarBackground = (address: string) => {
 };
 
 export function ConnectButton() {
-  const { address, isConnected, connect, isConnecting } = useWallet()
+  const { address, isConnected, connect, isConnecting, walletType } = useWallet()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [localAddress, setLocalAddress] = useState<string | undefined>(address)
   const [localConnected, setLocalConnected] = useState(isConnected)
@@ -69,6 +69,11 @@ export function ConnectButton() {
       if (eventAddress && connected) {
         setLocalAddress(eventAddress);
         setLocalConnected(true);
+      } else if (!connected) {
+        // Handle disconnect state
+        setLocalAddress(undefined);
+        setLocalConnected(false);
+        setIsDropdownOpen(false);
       }
     };
     
@@ -86,6 +91,11 @@ export function ConnectButton() {
       if (eventAddress) {
         setLocalAddress(eventAddress);
         setLocalConnected(true);
+      } else {
+        // Handle disconnect state
+        setLocalAddress(undefined);
+        setLocalConnected(false);
+        setIsDropdownOpen(false);
       }
     };
     
@@ -110,34 +120,94 @@ export function ConnectButton() {
 
   // Handle connect button click
   const handleConnect = useCallback(async () => {
-    // Check if we already have an address in AppKit state
-    const appKitAddress = 
-      (appKitState as any)?.address || 
-      (appKitState as any)?.data?.address ||
-      (appKitState as any)?.w3mState?.address;
+    try {
+      // Check if we already have an address in AppKit state
+      const appKitAddress = 
+        (appKitState as any)?.address || 
+        (appKitState as any)?.data?.address ||
+        (appKitState as any)?.w3mState?.address;
+      
+      if (appKitAddress) {
+        setLocalAddress(appKitAddress);
+        setLocalConnected(true);
+      }
+      
+      // Call the connect function from WalletProvider
+      await connect();
+
+      // Add specific handling for WalletConnect
+      const checkWalletConnectState = async () => {
+        const wcAddress = (appKitState as any)?.data?.address;
+        const wcConnected = (appKitState as any)?.data?.type === 'walletconnect';
+        const wcSession = (appKitState as any)?.session?.namespaces?.eip155?.accounts?.[0];
+        
+        if ((wcAddress && wcConnected) || wcSession) {
+          setLocalAddress(wcAddress || wcSession?.split(':')[2]);
+          setLocalConnected(true);
+          
+          // Dispatch wallet connection event
+          window.dispatchEvent(new CustomEvent('wallet-state-updated', {
+            detail: {
+              address: wcAddress || wcSession?.split(':')[2],
+              connected: true,
+              type: 'walletconnect'
+            }
+          }));
+        }
+      };
+
+      // Poll for WalletConnect state changes
+      let attempts = 0;
+      const maxAttempts = 30; // Increase max attempts for QR code scanning
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        await checkWalletConnectState();
+        
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+        }
+      }, 1000);
+
+      // Cleanup interval after max attempts or component unmount
+      return () => clearInterval(pollInterval);
+    } catch (error) {
+      console.error('Connection error:', error);
+    }
+  }, [appKitState, connect]);
+
+  // Add WalletConnect specific state watcher
+  useEffect(() => {
+    const wcAddress = (appKitState as any)?.data?.address;
+    const wcConnected = (appKitState as any)?.data?.type === 'walletconnect';
+    const wcSession = (appKitState as any)?.session?.namespaces?.eip155?.accounts?.[0];
     
-    if (appKitAddress) {
-      console.debug('Already have address in AppKit state, updating local state:', appKitAddress);
-      setLocalAddress(appKitAddress);
+    if ((wcAddress && wcConnected) || wcSession) {
+      setLocalAddress(wcAddress || wcSession?.split(':')[2]);
       setLocalConnected(true);
     }
-    
-    // Add a warning about social/email login limitations
-    const showSocialLoginWarning = () => {
-      // Only show this warning once per session
-      if (!sessionStorage.getItem('monad-social-login-warning-shown')) {
-        setTimeout(() => {
-          alert('Note: Social and email logins are currently disabled.');
-          sessionStorage.setItem('monad-social-login-warning-shown', 'true');
-        }, 500);
-      }
-    };
-    
-    showSocialLoginWarning();
-    
-    // Call the connect function from WalletProvider
-    connect();
-  }, [appKitState, connect]);
+  }, [appKitState]);
+
+  // Get wallet icon based on type
+  const getWalletIcon = () => {
+    switch (walletType?.toLowerCase()) {
+      case 'walletconnect':
+        return '/walletconnect-icon.png'
+      case 'phantom':
+        return '/phantom-icon.png'
+      case 'metamask':
+        return '/metamask-icon.png'
+      case 'coinbase':
+        return '/coinbase-icon.png'
+      default:
+        return '/monad-icon.png'
+    }
+  }
+
+  // Get wallet name for display
+  const getWalletName = () => {
+    if (!walletType) return 'Connected'
+    return walletType.charAt(0).toUpperCase() + walletType.slice(1).toLowerCase()
+  }
 
   if (!effectivelyConnected) {
     return (
@@ -159,20 +229,26 @@ export function ConnectButton() {
       >
         <div className="w-6 h-6 rounded-full bg-purple-500/20 p-0.5">
           <img
-            src="/monad-icon.png"
-            alt="Monad Avatar"
+            src={getWalletIcon()}
+            alt={`${getWalletName()} Icon`}
             className="w-full h-full rounded-full"
           />
         </div>
-        <span className="text-sm font-medium text-white">
-          {effectiveAddress ? `${effectiveAddress.slice(0, 4)}...${effectiveAddress.slice(-4)}` : 'Connected'}
-        </span>
+        <div className="flex flex-col items-start">
+          <span className="text-sm font-medium text-white">
+            {effectiveAddress ? `${effectiveAddress.slice(0, 4)}...${effectiveAddress.slice(-4)}` : 'Connected'}
+          </span>
+          <span className="text-xs text-gray-400">
+            {getWalletName()}
+          </span>
+        </div>
       </button>
 
       <WalletDropdown
         isOpen={isDropdownOpen}
         onClose={() => setIsDropdownOpen(false)}
         address={effectiveAddress || ''}
+        walletType={walletType}
       />
     </div>
   )

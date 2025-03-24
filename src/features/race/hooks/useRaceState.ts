@@ -157,7 +157,8 @@ export const useRaceData = () => {
           startTime: race.startTime,
           isActive: race.isActive,
           hasEnded: race.hasEnded,
-          prizePool: race.prizePool
+          prizePool: race.prizePool,
+          calculatedResults: []
         }));
 
       if (formattedRaces.length > 0) {

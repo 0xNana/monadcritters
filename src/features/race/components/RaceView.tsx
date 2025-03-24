@@ -12,9 +12,10 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import CountdownTimer from './CountdownTimer';
 import ResultsModal from './ResultsModal';
+import { logger } from '../../../utils/logger';
 
 
-type RaceProgressStatus = 'ready' | 'racing' | 'complete';
+type RaceProgressStatus = 'ready' | 'clashing' | 'complete';
 
 enum RaceStatus {
   Active = 'Active',
@@ -336,7 +337,7 @@ const batchManager = {
     try {
       await Promise.all(batch.map(raceId => debouncedProcessRace(raceId)));
     } catch (error) {
-      toast.error('Failed to process race batch. Please try again.');
+      toast.error('Failed to process clash batch. Please try again.');
     }
   }
 };
@@ -354,7 +355,7 @@ const convertRaceInfoToRace = (raceInfo: any): Race => {
   if (raceInfo.hasEnded) {
     progressStatus = 'complete';
   } else if (raceInfo.startTime && Number(raceInfo.startTime) > 0) {
-    progressStatus = 'racing';
+    progressStatus = 'clashing';
   }
 
   // Convert timestamps to Date objects
@@ -474,7 +475,7 @@ const getRaceResults = async (raceId: bigint, publicClient: any, attempt = 1, ma
     if ((!results || results.length === 0) && attempt < maxAttempts) {
       const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
       if (attempt === 1) {
-        toast.loading('Calculating race results...', { duration: delay });
+        toast.loading('Calculating clash results...', { duration: delay });
       }
       await new Promise(resolve => setTimeout(resolve, delay));
       return getRaceResults(raceId, publicClient, attempt + 1, maxAttempts);
@@ -503,7 +504,7 @@ const getRaceResults = async (raceId: bigint, publicClient: any, attempt = 1, ma
       return getRaceResults(raceId, publicClient, attempt + 1, maxAttempts);
     }
     
-    toast.error('Failed to fetch race results. Please try again.');
+    toast.error('Failed to fetch clash results. Please try again.');
     return cached?.results || [];
   }
 };
@@ -517,12 +518,12 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
 }) => {
   const { progress, isComplete, timeLeft, isCountdownComplete } = useRaceProgress(
     race.startTime ? BigInt(Math.floor(race.startTime.getTime() / 1000)) : BigInt(0),
-    race.progressStatus === 'racing',
+    race.progressStatus === 'clashing',
     race.hasEnded,
     30000 // 30 seconds countdown
   );
 
-  const isCountdownActive = race.progressStatus === 'racing' && !isCountdownComplete;
+  const isCountdownActive = race.progressStatus === 'clashing' && !isCountdownComplete;
   const isRaceInProgress = isCountdownComplete && !isComplete;
 
   return (
@@ -530,7 +531,7 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
       {isCountdownActive && (
         <>
           <div className="text-lg font-semibold text-white">
-            Race starts in: {Math.ceil(timeLeft / 1000)}s
+            Clash starts in: {Math.ceil(timeLeft / 1000)}s
           </div>
           <div className="w-full bg-gray-600/50 rounded-full h-3">
             <motion.div 
@@ -547,10 +548,10 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
         <>
           <div className="text-lg font-semibold text-white">
             {isRaceInProgress 
-              ? `Race time remaining: ${Math.ceil(timeLeft / 1000)}s`
+              ? `Clash time remaining: ${Math.ceil(timeLeft / 1000)}s`
               : isComplete 
-                ? 'Race Complete!'
-                : 'Race in Progress'}
+                ? 'Clash Complete!'
+                : 'Clash in Progress'}
           </div>
           <div className="w-full bg-gray-600/50 rounded-full h-2">
             <motion.div 
@@ -577,7 +578,7 @@ const RaceProgress = ({ race, onEndRace, isProcessingRace, isUserParticipant }: 
                 : "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white hover:shadow-red-500/25 cursor-pointer"
           }`}
         >
-          {isProcessingRace ? 'Processing...' : isCountdownActive ? 'Countdown in progress...' : isRaceInProgress ? 'Race in progress...' : isComplete ? 'End Race' : 'Race in progress...'}
+          {isProcessingRace ? 'Processing...' : isCountdownActive ? 'Countdown in progress...' : isRaceInProgress ? 'Clash in progress...' : isComplete ? 'End Clash' : 'Clash in progress...'}
         </motion.button>
       )}
     </div>
@@ -718,29 +719,61 @@ export default function RaceView() {
       });
   }, [completedRaces, historyFilter]);
 
-  // Add an effect to update relative times
+  // Effect to update relative times - optimize to only update visible races
   useEffect(() => {
     if (!filteredHistory.length) return;
-
+    
+    // Only update times for visible races (e.g., in viewport)
     const interval = setInterval(() => {
-      // Force re-render to update relative times
-      setHistoryFilter(prev => prev);
-    }, 1000); // Update every second
+      // Instead of forcing a full re-render, only update the time displays
+      const timeElements = document.querySelectorAll('[data-race-time]');
+      timeElements.forEach(element => {
+        const timestamp = element.getAttribute('data-race-time');
+        if (timestamp) {
+          element.textContent = formatTimeSpan(Number(timestamp));
+        }
+      });
+    }, 30000); // Update every 30 seconds instead of every second
 
     return () => clearInterval(interval);
   }, [filteredHistory.length]);
 
   // Race size options
   const raceSizeOptions = [
-    { value: RaceSize.Two, label: '2/2' },
-    { value: RaceSize.Five, label: '5/5' },
-    { value: RaceSize.Ten, label: '10/10' }
+    { value: RaceSize.Two, label: 'PvP Battle' },
+    { value: RaceSize.Five, label: '5 Player Battle' },
+    { value: RaceSize.Ten, label: '10 Player Battle' }
   ];
 
   // Use the useRaceActions hook for race operations
   const { startRace: startRaceAction, endRace: endRaceAction, processing } = useRaceActions();
   
-  // Simplified race operations
+  // Update the effect that refreshes races periodically
+  useEffect(() => {
+    // Only set up refresh if there are active races
+    const hasActiveRaces = races.some(race => !race.hasEnded);
+    if (!hasActiveRaces) return;
+
+    const interval = setInterval(() => {
+      // Only refresh races that are actively clashing
+      const clashingRaces = races.filter(race => 
+        race.progressStatus === 'clashing' && !race.hasEnded
+      );
+
+      if (clashingRaces.length > 0) {
+        // Only refresh the specific clashing races
+        clashingRaces.forEach(race => {
+          // Use the race info hook for individual race updates
+          const { refetch } = useRaceInfo(race.id);
+          refetch();
+        });
+      }
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [races]);
+
+  // Update the handleStartRace function to use our logger
   const handleStartRace = async (raceId: bigint) => {
     try {
       setIsProcessingStartRace(true);
@@ -749,6 +782,26 @@ export default function RaceView() {
       // Start the animation sequence
       setStartStage({ stage: 'initializing', progress: 0 });
       
+      // Optimistically update the race status
+      const updatedRace = races.find(r => r.id === raceId);
+      if (updatedRace) {
+        const optimisticRace = {
+          ...updatedRace,
+          progressStatus: 'clashing' as const,
+          startTime: new Date(),
+          hasEnded: false
+        };
+        
+        // Update the race in the races list
+        const updatedRaces = races.map(race => 
+          race.id === raceId ? optimisticRace : race
+        );
+        
+        // Update the organized races
+        const organized = organizeRacesBySize(updatedRaces);
+        setOrganizedRaces(organized);
+      }
+
       // Simulate the stages
       const stages: StartStage['stage'][] = ['initializing', 'positioning', 'warming', 'starting'];
       let currentStageIndex = 0;
@@ -780,44 +833,22 @@ export default function RaceView() {
       // Clear the interval if it's still running
       clearInterval(progressInterval);
       
-      // Get the current timestamp for race start
-      const startTime = new Date();
-      const updatedRace = races.find(r => r.id === raceId);
+      // Only refresh the specific race that started
+      const { refetch } = useRaceInfo(raceId);
+      await refetch();
       
-      if (updatedRace) {
-        // Create the updated race object with the new start time
-        const raceWithProgress = {
-          ...updatedRace,
-          progressStatus: 'racing' as const,
-          startTime, // Use the captured start time
-          hasEnded: false
-        };
-
-        // Update both the selected race and the races list
-        setSelectedRace(raceWithProgress);
-        
-        // Update the race in the races list
-        const updatedRaces = races.map(race => 
-          race.id === raceId ? raceWithProgress : race
-        );
-        
-        // Force a refresh of the organized races
-        const organized = organizeRacesBySize(updatedRaces);
-        setOrganizedRaces(organized);
-      }
-
-      // Refresh races after the countdown duration
-      setTimeout(() => {
-        refreshRaces();
-      }, 32000); // 32 seconds to ensure we get the updated state after countdown
     } catch (error) {
-      console.error('Failed to start race:', error);
+      logger.error('Failed to start race:', error);
       toast.error('Failed to start the race. Please try again.');
       
-      // Reset the race state if the transaction fails
+      // Revert the optimistic update on error
       const originalRace = races.find(r => r.id === raceId);
       if (originalRace) {
-        setSelectedRace(originalRace);
+        const updatedRaces = races.map(race => 
+          race.id === raceId ? originalRace : race
+        );
+        const organized = organizeRacesBySize(updatedRaces);
+        setOrganizedRaces(organized);
       }
     } finally {
       setIsProcessingStartRace(false);
@@ -825,50 +856,70 @@ export default function RaceView() {
     }
   };
   
+  // Update the handleEndRace function to use optimistic updates
   const handleEndRace = async (raceId: bigint) => {
     try {
       setIsProcessingRace(true);
       setProcessingRaceId(raceId);
-      const endTime = new Date(); // Capture the exact time when endRace is called
-      await endRaceAction(Number(raceId));
+      const endTime = new Date();
       
-      // Wait for transaction confirmation and fetch results
+      // Optimistically update the race status
       const updatedRace = races.find(r => r.id === raceId);
       if (updatedRace) {
-        try {
-          // Add a small delay to ensure the blockchain has processed the end race transaction
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
-          // Fetch the leaderboard results
-          const leaderboardResults = await getRaceResults(raceId, publicClient);
-          
-          // Update the race with results and show modal, using the captured endTime
-          const raceWithResults = {
-            ...updatedRace,
-            progressStatus: 'complete' as const,
-            hasEnded: true,
-            endTime, // Use the captured endTime
-            results: leaderboardResults.map(entry => ({
-              player: entry.player as `0x${string}`,
-              position: entry.position,
-              score: entry.score,
-              reward: entry.reward
-            }))
-          };
-          
-          setSelectedResultsRace(raceWithResults);
-          toast.success('Race completed! View your results.');
-        } catch (error) {
-          toast.error('Failed to fetch race results. Please try again.');
-        }
+        const optimisticRace = {
+          ...updatedRace,
+          progressStatus: 'complete' as const,
+          hasEnded: true,
+          endTime
+        };
+        
+        // Update the race in the races list
+        const updatedRaces = races.map(race => 
+          race.id === raceId ? optimisticRace : race
+        );
+        
+        // Update the organized races
+        const organized = organizeRacesBySize(updatedRaces);
+        setOrganizedRaces(organized);
+      }
+
+      await endRaceAction(Number(raceId));
+      
+      // Only refresh the specific race that ended
+      const { refetch } = useRaceInfo(raceId);
+      await refetch();
+      
+      // Fetch results for the ended race
+      const leaderboardResults = await getRaceResults(raceId, publicClient);
+      
+      // Update the race with results
+      if (updatedRace) {
+        const raceWithResults = {
+          ...updatedRace,
+          results: leaderboardResults.map(entry => ({
+            player: entry.player as `0x${string}`,
+            position: entry.position,
+            score: entry.score,
+            reward: entry.reward
+          }))
+        };
+        
+        setSelectedResultsRace(raceWithResults);
+        toast.success('Clash completed! View your results.');
       }
       
-      // Refresh races after a delay to get updated data
-      setTimeout(() => {
-        refreshRaces();
-      }, 2000);
     } catch (error) {
-      toast.error('Failed to end race. Please try again.');
+      toast.error('Failed to end clash. Please try again.');
+      
+      // Revert the optimistic update on error
+      const originalRace = races.find(r => r.id === raceId);
+      if (originalRace) {
+        const updatedRaces = races.map(race => 
+          race.id === raceId ? originalRace : race
+        );
+        const organized = organizeRacesBySize(updatedRaces);
+        setOrganizedRaces(organized);
+      }
     } finally {
       setIsProcessingRace(false);
       setProcessingRaceId(null);
@@ -891,27 +942,24 @@ export default function RaceView() {
     }
   }, [address, races]);
   
-  // Effect to refresh races periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refreshRaces();
-    }, 30000); // Refresh every 30 seconds
-    
-    return () => clearInterval(interval);
-  }, [refreshRaces]);
   // Listen for race events
   useRaceEvents(
     // Race Created
     (raceId) => {
-      toast.success('New race created!');
-      refreshRaces();
+      toast.success('New clash created!');
+      // Use targeted update instead of full refresh
+      const { refetch } = useRaceInfo(raceId);
+      refetch();
     },
     // Player Joined
     (raceId, player, critterId) => {
       if (player.toLowerCase() === address?.toLowerCase()) {
-        toast.success('Successfully joined the race!');
+        toast.success('Successfully joined the clash!');
       }
-      refreshRaces();
+      
+      // Use targeted update instead of full refresh
+      const { refetch } = useRaceInfo(raceId);
+      refetch();
       
       // If this is the current user, select this race
       if (player.toLowerCase() === address?.toLowerCase()) {
@@ -920,35 +968,51 @@ export default function RaceView() {
           setSelectedRace(race);
           setSelectedRaceSize(race.raceSize as RaceSize);
         } else {
-          // If race not found in current state, refresh and then try to select
-          refreshRaces().then(() => {
-            const updatedRaces = allRaces.filter(r => r.raceSize === selectedRaceSize);
-            const updatedRace = updatedRaces.find(r => r.id === raceId);
-            if (updatedRace) {
-              setSelectedRace(updatedRace);
-            }
-          });
+          // If race not found, fetch it directly and convert to Race type
+          const { data: newRace } = useRaceInfo(raceId);
+          if (newRace) {
+            const raceSize = Number(newRace.raceSize) as RaceSize;
+            const convertedRace: Race = {
+              id: newRace.id,
+              size: getRaceSizeMaxPlayers(raceSize),
+              currentPlayers: newRace.players.filter(p => p !== '0x0000000000000000000000000000000000000000').length,
+              status: newRace.hasEnded ? RaceStatus.Completed : RaceStatus.Active,
+              startTime: newRace.startTime ? new Date(Number(newRace.startTime) * 1000) : undefined,
+              endTime: newRace.hasEnded ? new Date() : undefined,
+              progressStatus: newRace.hasEnded ? 'complete' : newRace.startTime ? 'clashing' : 'ready',
+              players: newRace.players,
+              hasEnded: newRace.hasEnded,
+              raceSize: raceSize,
+              maxPlayers: getRaceSizeMaxPlayers(raceSize)
+            };
+            setSelectedRace(convertedRace);
+            setSelectedRaceSize(raceSize);
+          }
         }
       }
     },
     // Race Started
     (raceId, startTime) => {
-      toast.success('Race started! Get ready!');
-      refreshRaces();
+      toast.success('Clash started! Get ready!');
+      
+      // Use targeted update instead of full refresh
+      const { refetch } = useRaceInfo(raceId);
+      refetch();
       
       // Update the selected race if it's the one that started
       if (selectedRace && selectedRace.id === raceId) {
         setSelectedRace({
           ...selectedRace,
           startTime: new Date(Number(startTime) * 1000),
-          progressStatus: 'racing'
+          progressStatus: 'clashing'
         });
       }
     },
     // Race Ended
     async (raceId, results) => {
-      // Add a small delay to ensure the blockchain has processed the results
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Use targeted update instead of full refresh
+      const { refetch } = useRaceInfo(raceId);
+      await refetch();
       
       try {
         // Fetch the leaderboard results
@@ -973,28 +1037,25 @@ export default function RaceView() {
           // Show results modal if user was in the race
           if (isUserParticipant(endedRace)) {
             setSelectedResultsRace(raceWithResults);
-            toast.success('Race completed! View your results.');
+            toast.success('Clash completed! View your results.');
           }
         }
       } catch (error) {
-        toast.error('Error processing race results. Please try again.');
+        toast.error('Error processing clash results. Please try again.');
       }
-      
-      // Refresh races to update UI
-      refreshRaces();
     },
     // PowerUp Revenue Withdrawn
     (owner: `0x${string}`, amount: bigint) => {
       if (owner.toLowerCase() === address?.toLowerCase()) {
         toast.success(`Successfully withdrew ${formatUnits(amount, 18)} MON!`);
-        refreshRaces();
+        // No need to refresh for revenue withdrawal
       }
     },
     // PowerUps Purchased
     (player: `0x${string}`, speedBoosts: bigint) => {
       if (player.toLowerCase() === address?.toLowerCase()) {
         toast.success(`Successfully purchased ${speedBoosts.toString()} speed boosts!`);
-        refreshRaces();
+        // No need to refresh for powerup purchase
       }
     }
   );
@@ -1026,10 +1087,12 @@ export default function RaceView() {
     status: progressStatus === 'complete' ? RaceStatus.Completed : race.status
   });
 
-  // Update countdown timer with fixed types
+  // Update countdown timer with fixed types and optimized updates
   const [countdowns, setCountdowns] = useState<{ [key: string]: number }>({});
   useEffect(() => {
-    const racingRaces = races.filter(race => race.progressStatus === 'racing');
+    const racingRaces = races.filter(race => 
+      race.progressStatus === 'clashing' && !race.hasEnded
+    );
     if (racingRaces.length === 0) return;
 
     const interval = setInterval(() => {
@@ -1055,17 +1118,17 @@ export default function RaceView() {
               
               // Update race status to complete when time is up
               if (remainingTime === 0 && race.progressStatus !== 'complete') {
-                // Refresh races to get updated status
+                // Only refresh races when a race actually completes
                 refreshRaces();
                 
                 // Update the selected race if it's the one that ended
                 if (selectedRace && selectedRace.id === race.id) {
-                  setSelectedRace({
-                    ...selectedRace,
+                  setSelectedRace(prev => prev ? {
+                    ...prev,
                     hasEnded: true,
                     progressStatus: 'complete',
-                    endTime: new Date() // Set end time when countdown reaches zero
-                  });
+                    endTime: new Date()
+                  } : null);
                 }
               }
             } else {
@@ -1074,6 +1137,7 @@ export default function RaceView() {
           }
         });
         
+        // Only trigger a state update if there are actual changes
         return hasChanges ? updatedCountdowns : prevCountdowns;
       });
     }, 1000);
@@ -1172,7 +1236,7 @@ export default function RaceView() {
       className="flex flex-col items-center justify-center py-12"
     >
       <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-purple-500 mb-4"></div>
-      <p className="text-gray-400">Loading races...</p>
+      <p className="text-gray-400">Loading clashes...</p>
     </motion.div>
   );
 
@@ -1189,25 +1253,25 @@ export default function RaceView() {
     return race.currentPlayers >= race.size;
   }, []);
 
-  // Add this function to determine if the Start Race button should be enabled
+  // Add this function to determine if the Start Clash button should be enabled
   const canStartRace = useCallback((race: Race): { enabled: boolean; tooltip: string } => {
     if (!isConnected) {
-      return { enabled: false, tooltip: "Connect your wallet to interact with races" };
+      return { enabled: false, tooltip: "Connect your wallet to interact with clashes" };
     }
     
     if (!isUserParticipant(race)) {
-      return { enabled: false, tooltip: "Only participants can start the race" };
+      return { enabled: false, tooltip: "Only participants can start the clash" };
     }
     
     if (!isRaceFull(race)) {
-      return { enabled: false, tooltip: "Race must be full before it can start" };
+      return { enabled: false, tooltip: "Clash must be full before it can start" };
     }
     
     if (race.progressStatus !== 'ready') {
-      return { enabled: false, tooltip: "Race is not in a ready state" };
+      return { enabled: false, tooltip: "Clash is not in a ready state" };
     }
     
-    return { enabled: true, tooltip: "Start the race!" };
+    return { enabled: true, tooltip: "Start the clash!" };
   }, [isConnected, isUserParticipant, isRaceFull]);
 
   // Update the filtered active races logic
@@ -1239,7 +1303,7 @@ export default function RaceView() {
         }))
       } as Race;
     } catch (error) {
-      toast.error('Error fetching race results. Please try again.');
+      toast.error('Error fetching clash results. Please try again.');
       return race;
     }
   };
@@ -1248,7 +1312,7 @@ export default function RaceView() {
   const handleViewResults = async (race: Race) => {
     try {
       // Show loading toast
-      const loadingToast = toast.loading('Loading race results...');
+      const loadingToast = toast.loading('Loading clash results...');
       
       // Fetch results if needed
       const raceWithResults = await fetchCompletedRaceResults(race);
@@ -1256,7 +1320,7 @@ export default function RaceView() {
       // Dismiss loading toast
       toast.dismiss(loadingToast);
       
-      // Show the modal with the race results
+      // Show the modal with the clash results
       setSelectedResultsRace({
         ...raceWithResults,
         results: raceWithResults.results?.map(result => ({
@@ -1265,7 +1329,7 @@ export default function RaceView() {
         }))
       });
     } catch (error) {
-      toast.error('Failed to load race results. Please try again.');
+      toast.error('Failed to load clash results. Please try again.');
     }
   };
 
@@ -1301,10 +1365,10 @@ export default function RaceView() {
               <div>
                 <h1 className="text-4xl sm:text-5xl font-bold mb-2">
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 animate-text-shimmer">
-                    Race View
+                    Clash Arena
                   </span>
                 </h1>
-                <p className="text-gray-300 text-lg">Watch your critters compete in real-time</p>
+                <p className="text-gray-300 text-lg">Watch your critters clash and compete for the highest score</p>
               </div>
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -1349,13 +1413,13 @@ export default function RaceView() {
             className="mb-8 bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50"
           >
             <h2 className="text-xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-              Active Races
+              Active Clashes
             </h2>
             
             {isProcessingRace ? (
               <div className="flex items-center justify-center py-8">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-purple-500 border-r-transparent"></div>
-                <span className="ml-3 text-gray-300">Processing race...</span>
+                <span className="ml-3 text-gray-300">Processing clash...</span>
               </div>
             ) : filteredActiveRaces.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1367,7 +1431,7 @@ export default function RaceView() {
                   >
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                        Race #{race.id.toString()}
+                        Clash #{race.id.toString()}
                       </span>
                       <span className={`px-3 py-1 rounded-full text-sm ${
                         race.status === RaceStatus.Active
@@ -1380,7 +1444,7 @@ export default function RaceView() {
 
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Players</span>
+                        <span className="text-gray-400">Participants</span>
                         <span className="text-gray-200">{race.currentPlayers}/{race.size}</span>
                       </div>
                       <div className="flex justify-between text-sm">
@@ -1412,7 +1476,7 @@ export default function RaceView() {
                                     : "bg-gray-600 text-gray-400 cursor-not-allowed"
                               }`}
                             >
-                              {isProcessingRace ? 'Processing...' : 'Start Race'}
+                              {isProcessingRace ? 'Processing...' : 'Start Clash'}
                             </motion.button>
                             {!canStartRace(race).enabled && (
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
@@ -1420,7 +1484,7 @@ export default function RaceView() {
                             </div>
                           )}
                           </div>
-                        ) : race.progressStatus === 'racing' ? (
+                        ) : race.progressStatus === 'clashing' ? (
                           <div className="space-y-3">
                             {race.startTime && (
                               <RaceProgress
@@ -1447,7 +1511,7 @@ export default function RaceView() {
                             onClick={() => handleViewResults(race)}
                             className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white text-sm rounded-lg transform transition-all shadow-lg hover:shadow-purple-500/25"
                           >
-                            View Results
+                            View Clash Results
                           </motion.button>
                         </div>
                         {race.results.slice(0, 3).map((player, index) => (
@@ -1497,17 +1561,17 @@ export default function RaceView() {
             ) : (
               <div className="text-center py-8">
                 <p className="text-gray-400 mb-4">No active {
-                  selectedRaceSize === RaceSize.Two ? '2/2' : 
-                  selectedRaceSize === RaceSize.Five ? '5/5' : 
-                  selectedRaceSize === RaceSize.Ten ? '10/10' : ''
-                } races found</p>
+                  selectedRaceSize === RaceSize.Two ? 'PvP' : 
+                  selectedRaceSize === RaceSize.Five ? '5 Player' : 
+                  selectedRaceSize === RaceSize.Ten ? '10 Player' : ''
+                } clashes found</p>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleGoToLobby}
                   className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transform transition-all shadow-lg hover:shadow-purple-500/25"
                 >
-                  Join a Race
+                  Join a Clash
                 </motion.button>
               </div>
             )}
@@ -1522,7 +1586,7 @@ export default function RaceView() {
           >
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                Race History
+                Clash History
               </h2>
               
               <div className="flex gap-2">
@@ -1556,14 +1620,15 @@ export default function RaceView() {
                     <div className="flex justify-between items-center mb-2">
                       <div>
                         <span className="text-lg font-semibold text-gray-300">
-                          Race #{race.id.toString()}
+                          Clash #{race.id.toString()}
                         </span>
                         <span className="ml-2 px-2 py-1 text-xs rounded-full bg-gray-600/50 text-gray-300">
-                          {race.size} Players
+                          {race.size} Participants
                         </span>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm text-gray-400">
+                        <div className="text-sm text-gray-400"
+                             data-race-time={race.endTime?.getTime()}>
                           {formatTimeSpan(race.endTime)}
                         </div>
                       </div>
@@ -1598,7 +1663,7 @@ export default function RaceView() {
               </div>
             ) : (
               <p className="text-gray-400 text-center py-4">
-                No race history found for this period
+                No clash history found for this period
               </p>
             )}
           </motion.div>
@@ -1612,7 +1677,7 @@ export default function RaceView() {
               className="mb-8 bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50"
             >
               <h2 className="text-xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                Race Statistics
+                Clash Statistics
               </h2>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1647,7 +1712,7 @@ export default function RaceView() {
             </motion.div>
           )}
 
-          {/* Start Race Processing Overlay */}
+          {/* Start Clash Processing Overlay */}
           {isProcessingStartRace && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -1657,12 +1722,12 @@ export default function RaceView() {
               <div className="bg-gray-800/90 rounded-xl p-8 max-w-md w-full mx-4 border border-gray-700/50">
                 <div className="text-center">
                   <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-green-500 border-r-transparent mb-4"></div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Preparing Race</h2>
+                  <h2 className="text-2xl font-bold text-white mb-2">Preparing Clash</h2>
                   <p className="text-gray-300 mb-4">
-                    {startStage?.stage === 'initializing' && 'Initializing race track...'}
-                    {startStage?.stage === 'positioning' && 'Positioning critters at starting line...'}
-                    {startStage?.stage === 'warming' && 'Warming up engines...'}
-                    {startStage?.stage === 'starting' && 'Ready, set, GO!'}
+                    {startStage?.stage === 'initializing' && 'Initializing clash parameters...'}
+                    {startStage?.stage === 'positioning' && 'Positioning critters in the arena...'}
+                    {startStage?.stage === 'warming' && 'Powering up critters...'}
+                    {startStage?.stage === 'starting' && 'Clash commencing!'}
                   </p>
                   
                   <div className="w-full bg-gray-700 rounded-full h-2 mb-4">
@@ -1673,7 +1738,7 @@ export default function RaceView() {
                   </div>
                   
                   <p className="text-sm text-gray-400">
-                    Get ready! The race is about to begin... 🏁
+                    Get ready! The clash is about to begin... ⚔️
                   </p>
                 </div>
               </div>
@@ -1690,12 +1755,12 @@ export default function RaceView() {
               <div className="bg-gray-800/90 rounded-xl p-8 max-w-md w-full mx-4 border border-gray-700/50">
                 <div className="text-center">
                   <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-purple-500 border-r-transparent mb-4"></div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Finalizing Race</h2>
+                  <h2 className="text-2xl font-bold text-white mb-2">Finalizing Clash</h2>
                   <p className="text-gray-300 mb-4">
-                    {processingStage?.stage === 'completing' && 'Calculating final positions...'}
-                    {processingStage?.stage === 'calculating' && 'Tallying up scores...'}
+                    {processingStage?.stage === 'completing' && 'Determining final standings...'}
+                    {processingStage?.stage === 'calculating' && 'Calculating clash scores...'}
                     {processingStage?.stage === 'distributing' && 'Distributing rewards...'}
-                    {processingStage?.stage === 'finalizing' && 'Preparing race results...'}
+                    {processingStage?.stage === 'finalizing' && 'Preparing clash results...'}
                   </p>
                   
                   <div className="w-full bg-gray-700 rounded-full h-2 mb-4">
@@ -1706,7 +1771,7 @@ export default function RaceView() {
                   </div>
                   
                   <p className="text-sm text-gray-400">
-                    Almost there! Your race results will be revealed soon... 🏁
+                    Almost there! Your clash results will be revealed soon... ⚔️
                   </p>
                 </div>
               </div>

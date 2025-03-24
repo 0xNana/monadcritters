@@ -5,7 +5,6 @@ import { useWatchContractEvent, useChainId } from 'wagmi';
 import { useWallet } from '../../../components/WalletProvider';
 import { contracts } from '../../../utils/config';
 import { useRaceManager } from '../hooks/useRaceManager';
-import type { Critter, PowerUpInventory } from '../../../types';
 import { toast } from 'react-hot-toast';
 import React from 'react';
 
@@ -36,8 +35,8 @@ interface RaceEntryProps {
   onJoinRace: (critterId: string) => Promise<boolean>;
   onCreateRace: () => Promise<boolean>;
   entryFee: bigint;
-  userCritters: Critter[];
-  selectedPowerUps: PowerUpInventory;
+  userCritters: any[];
+  selectedPowerUps: any;
   isLoading: boolean;
   canJoinRace: boolean;
   canCreateRace: boolean;
@@ -158,8 +157,8 @@ export function RaceEntry({
   const { address } = useWallet();
 
   const chainId = useChainId();
-  const contractAddress = chainId === 11155111 
-    ? contracts.sepolia.race 
+  const contractAddress = chainId === 10143
+    ? contracts.monad.race 
     : contracts.monad.race;
 
   // Get current player count and max players directly from currentRace
@@ -191,12 +190,12 @@ export function RaceEntry({
           if (cachedWaitingRace.raceId) {
             setJoinValidation({
               canJoin: false,
-              reason: `You are already in Race #${cachedWaitingRace.raceId}`,
+              reason: `You are already in Battle #${cachedWaitingRace.raceId}`,
               activeRaceId: cachedWaitingRace.raceId
             });
             setCreateValidation({
               canCreate: false,
-              reason: `You are already in Race #${cachedWaitingRace.raceId}`,
+              reason: `You are already in Battle #${cachedWaitingRace.raceId}`,
               activeRaceId: cachedWaitingRace.raceId
             });
           }
@@ -224,12 +223,12 @@ export function RaceEntry({
 
           setJoinValidation({
             canJoin: false,
-            reason: `You are already in Race #${waitingId}`,
+            reason: `You are already in Battle #${waitingId}`,
             activeRaceId: waitingId
           });
           setCreateValidation({
             canCreate: false,
-            reason: `You are already in Race #${waitingId}`,
+            reason: `You are already in Battle #${waitingId}`,
             activeRaceId: waitingId
           });
         }
@@ -242,8 +241,8 @@ export function RaceEntry({
         
         await fetchActiveRaces();
       } catch (error) {
-        console.error('Error checking waiting race:', error);
-        toast.error('Failed to check race status');
+        console.error('Error checking waiting battle:', error);
+        toast.error('Failed to check battle status');
       } finally {
         setIsLoading(false);
       }
@@ -275,7 +274,7 @@ export function RaceEntry({
 
   // Debug logging
   useEffect(() => {
-    console.debug('Race Entry State:', {
+    console.debug('Battle Entry State:', {
       waitingRaceId,
       currentRace: currentRace?.id,
       playerCount: currentPlayers,
@@ -358,12 +357,12 @@ export function RaceEntry({
     if (waitingRaceId && currentRace) {
       setJoinValidation({
         canJoin: false,
-        reason: `You are already in Race #${waitingRaceId}`,
+        reason: `You are already in Clash #${waitingRaceId}`,
         activeRaceId: waitingRaceId
       });
       setCreateValidation({
         canCreate: false,
-        reason: `You are already in Race #${waitingRaceId}`,
+        reason: `You are already in Clash #${waitingRaceId}`,
         activeRaceId: waitingRaceId
       });
     } else {

@@ -39,7 +39,7 @@ interface RawRaceData {
 interface ExtendedRaceInfo extends Omit<RaceInfo, 'players' | 'critterIds'> {
   players: readonly `0x${string}`[];
   critterIds: readonly bigint[];
-  calculatedResults?: RaceResult[];
+  calculatedResults: RaceResult[];
 }
 
 export class LeaderboardService {
@@ -64,7 +64,6 @@ export class LeaderboardService {
   private convertRaceData(race: RawRaceData): ExtendedRaceInfo {
     return {
       ...race,
-      playerCount: BigInt(race.players.length),
       calculatedResults: race.calculatedResults || []
     };
   }
@@ -102,8 +101,9 @@ export class LeaderboardService {
 
     // Apply minimum races filter
     let entries = Array.from(this.cache.values());
-    if (filters.minRaces) {
-      entries = entries.filter(entry => entry.stats.totalRaces >= filters.minRaces);
+    const minRaces = filters.minRaces ?? 0; // Provide a default value
+    if (minRaces > 0) {
+      entries = entries.filter(entry => entry.stats.totalRaces >= minRaces);
     }
 
     // Sort and add ranks

@@ -172,9 +172,9 @@ const isResultsPendingError = (error: any): boolean => {
     const causeMessage = error?.cause?.message?.toLowerCase() || '';
     
     const pendingPhrases = [
-        'race results not calculated yet',
-        'results not calculated',
-        'results pending',
+        'battle results not calculated yet',
+        'battle results not calculated',
+        'battle results pending',
         'not calculated yet'
     ];
     
@@ -316,14 +316,14 @@ const getScoresByMethod = async (publicClient: any, raceId: bigint): Promise<Rac
     if (rewardsDistributed) {
         // If rewards were distributed but we couldn't get results, this is a temporary error
         const error = new Error(
-            'Race results exist (rewards distributed) but could not be retrieved. This may be a temporary issue, please try again.'
+            'Battle results exist (rewards distributed) but could not be retrieved. This may be a temporary issue, please try again.'
         );
         error.name = 'ResultsTemporarilyUnavailable';
         throw error;
     }
 
     if (pendingError) {
-        const error = new Error('Race results are still being calculated. Please try again in a moment.');
+        const error = new Error('Battle results are still being calculated. Please try again in a moment.');
         error.name = 'ResultsPending';
         throw error;
     }

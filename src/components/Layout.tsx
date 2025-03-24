@@ -19,7 +19,7 @@ const NAV_LINKS: NavLink[] = [
   { to: '/', label: 'Home' },
   { to: '/mint', label: 'Mint' },
   { to: '/lobby', label: 'Lobby' },
-  { to: '/race', label: 'Race' },
+  { to: '/clash-arena', label: 'Clash Arena' },
   { to: '/leaderboard', label: 'Leaderboard' },
 ]
 
@@ -80,7 +80,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   to="/" 
                   className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 whitespace-nowrap"
                 >
-                  MonadCritters
+                  Clash Of Critters
                 </Link>
               </div>
 
@@ -107,7 +107,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 to="/" 
                 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 whitespace-nowrap"
               >
-                MonadCritters
+                Clash Of Critters
               </Link>
               
               <div className="flex items-center gap-4">

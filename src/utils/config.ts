@@ -466,9 +466,6 @@ export const contracts = {
   }
 } as const;
 
-// Add debug logging
-console.debug('Contract addresses:', contracts);
-
 // Cache and retry configuration
 export const CACHE_CONFIG = {
   DURATION: {
@@ -654,4 +651,8 @@ export const clearRaceCache = () => {
     console.error('Error clearing race cache:', error);
   }
 };
+
+if (process.env.NODE_ENV !== 'production') {
+  console.debug('Contract addresses:', contracts);
+}
 

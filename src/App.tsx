@@ -13,7 +13,7 @@ import LeaderboardPage from './pages/LeaderboardPage'
 
 function App() {
   return (
-    <WagmiConfig config={config}>
+    <WagmiConfig config={config as any}>
       <WalletProvider>
         <Router>
           <Layout>
@@ -22,7 +22,7 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/mint" element={<MintingPage />} />
                 <Route path="/lobby" element={<RaceLobbyPage />} />
-                <Route path="/race" element={<RaceView />} />
+                <Route path="/clash-arena" element={<RaceView />} />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
               </Routes>
             </AnimatePresence>

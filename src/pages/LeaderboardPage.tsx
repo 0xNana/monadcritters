@@ -19,7 +19,7 @@ const TIME_RANGE_OPTIONS = [
 const SORT_OPTIONS = [
   { value: 'score', label: 'Score' },
   { value: 'rewards', label: 'Rewards' },
-  { value: 'totalRaces', label: 'Races' }
+  { value: 'totalRaces', label: 'Battles' }
 ] as const;
 
 type ContractRaceInfo = {
@@ -108,14 +108,15 @@ const LeaderboardPage = () => {
 
   // Convert contract race info to our RaceInfo type
   const convertToRaceInfo = (race: ContractRaceInfo): RaceInfo => ({
-    id: race.id,
-    raceSize: race.raceSize as RaceSize,
-    players: [...race.players],
-    critterIds: [...race.critterIds],
-    startTime: race.startTime,
-    isActive: race.isActive,
-    hasEnded: race.hasEnded,
-    prizePool: race.prizePool
+      id: race.id,
+      raceSize: race.raceSize as RaceSize,
+      players: [...race.players],
+      critterIds: [...race.critterIds],
+      startTime: race.startTime,
+      isActive: race.isActive,
+      hasEnded: race.hasEnded,
+      prizePool: race.prizePool,
+      calculatedResults: undefined
   });
 
   // Process races and their results
@@ -247,7 +248,7 @@ const LeaderboardPage = () => {
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-400">Total Races</div>
+                  <div className="text-sm text-gray-400">Total Clashes</div>
                   <div className="text-2xl font-bold text-green-400">
                     {userStats.stats.totalRaces}
                   </div>
@@ -285,7 +286,7 @@ const LeaderboardPage = () => {
                       Rewards
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Races
+                      Clashes
                     </th>
                   </tr>
                 </thead>

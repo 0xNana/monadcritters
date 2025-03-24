@@ -9,9 +9,10 @@ interface WalletDropdownProps {
   isOpen: boolean;
   onClose: () => void;
   address: string;
+  walletType?: string;
 }
 
-export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps) {
+export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletDropdownProps) {
   const { disconnect } = useWallet();
   const { data: balance } = useBalance({
     address: address as `0x${string}`,
@@ -19,9 +20,27 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
   const [showToast, setShowToast] = useState(false);
   const appKitState = useAppKitState();
 
-  // Check if this is a social login
-  const isSocialLogin = (appKitState as any)?.data?.type === 'email' || 
-                       (appKitState as any)?.data?.type === 'social';
+  // Get wallet icon based on type
+  const getWalletIcon = () => {
+    switch (walletType?.toLowerCase()) {
+      case 'walletconnect':
+        return '/walletconnect-icon.png'
+      case 'phantom':
+        return '/phantom-icon.png'
+      case 'metamask':
+        return '/metamask-icon.png'
+      case 'coinbase':
+        return '/coinbase-icon.png'
+      default:
+        return '/monad-icon.png'
+    }
+  }
+
+  // Get wallet name for display
+  const getWalletName = () => {
+    if (!walletType) return 'Connected Wallet'
+    return walletType.charAt(0).toUpperCase() + walletType.slice(1).toLowerCase()
+  }
 
   const truncatedAddress = `${address.slice(0, 4)}...${address.slice(-4)}`;
 
@@ -31,8 +50,24 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
   };
 
   const handleDisconnect = async () => {
-    await disconnect();
-    onClose();
+    try {
+      await disconnect();
+      onClose();
+      // Force a UI update after disconnect
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('wallet-state-updated', {
+          detail: {
+            address: undefined,
+            connected: false,
+            type: undefined
+          }
+        }));
+      }, 100);
+    } catch (error) {
+      console.error('Disconnect error:', error);
+      // Still close the dropdown even if there's an error
+      onClose();
+    }
   };
 
   return (
@@ -79,30 +114,28 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
                 </button>
 
                 {/* Profile Section */}
-                <div className="flex flex-col items-center mb-4">
-                  <div className="w-16 h-16 rounded-full bg-purple-500/20 p-1 mb-2">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-16 h-16 rounded-full bg-purple-500/20 p-1">
                     <img
-                      src="/monad-icon.png"
-                      alt="Monad Avatar"
+                      src={getWalletIcon()}
+                      alt={`${getWalletName()} Icon`}
                       className="w-full h-full rounded-full"
                     />
                   </div>
-                  <div className="text-lg font-semibold text-white">{truncatedAddress}</div>
-                  <div className="text-sm text-gray-400">
-                    {balance ? `${Number(balance.formatted).toFixed(3)} ${balance.symbol}` : '0 MON'}
-                  </div>
-                  {isSocialLogin && (
-                    <div className="mt-1 px-2 py-1 bg-blue-500/20 rounded-full text-blue-300 text-xs">
-                      Social Login
+                  <div>
+                    <div className="text-lg font-semibold text-white">{truncatedAddress}</div>
+                    <div className="text-sm text-gray-400">{getWalletName()}</div>
+                    <div className="text-sm text-gray-400">
+                      {balance ? `${Number(balance.formatted).toFixed(3)} ${balance.symbol}` : '0 MON'}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Actions */}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
                   <button
                     onClick={handleCopyAddress}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors"
                   >
                     <svg
                       className="w-4 h-4"
@@ -121,7 +154,7 @@ export function WalletDropdown({ isOpen, onClose, address }: WalletDropdownProps
                   </button>
                   <button
                     onClick={handleDisconnect}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-700/50 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-lg transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-700/50 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-lg transition-colors"
                   >
                     <svg
                       className="w-4 h-4"

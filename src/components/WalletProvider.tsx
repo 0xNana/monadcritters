@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 
 // Get project ID from environment variables
-const REOWN_PROJECT_ID = import.meta.env.VITE_REOWN_PROJECT_ID || '28fcdde9a2c6d9e5c3b9a4e8f7d6b5a4'
+const REOWN_PROJECT_ID = import.meta.env.VITE_REOWN_PROJECT_ID || ''
 
 if (!REOWN_PROJECT_ID) {
   console.warn('Reown project ID not found in environment variables, using fallback')
@@ -23,7 +23,7 @@ const queryClient = new QueryClient()
 // Create Wagmi adapter
 const wagmiAdapter = new WagmiAdapter({
   networks: [monadTestnet],
-  projectId: REOWN_PROJECT_ID,
+  projectId: REOWN_PROJECT_ID
 })
 
 // Initialize AppKit
@@ -31,78 +31,54 @@ createAppKit({
   adapters: [wagmiAdapter],
   networks: [monadTestnet],
   metadata: {
-    name: 'MonadCritters',
-    description: 'Race your critters on Monad testnet!',
-    url: window.location.origin || 'https://monadcritters.com',
-    icons: [window.location.origin + '/logo.png' || 'https://monadcritters.com/logo.png'],
+    name: 'Clash Of Critters',
+    description: 'Clash with your critters on Monad testnet!',
+    url: window.location.origin || 'https://clashofcritters.com',
+    icons: [window.location.origin + '/logo.png' || 'https://clashofcritters.com/logo.png'],
   },
   projectId: REOWN_PROJECT_ID,
   features: {
-    analytics: false, // Disable analytics to avoid 403 errors
-    email: false, // Disable email login since WalletConnect doesn't support Monad testnet
-    socials: [], // Disable social logins since WalletConnect doesn't support Monad testnet
-    emailShowWallets: true, // Show wallet options on first connect screen
+    analytics: false,
+    email: false,
+    socials: [],
+    emailShowWallets: true
   },
-  allWallets: 'SHOW', // Show all available wallets
+  allWallets: 'SHOW',
+  includeWalletIds: ['walletconnect', 'injected', 'phantom', 'metamask', 'coinbase']
 })
 
-// Add error handler for postMessage errors
-if (typeof window !== 'undefined') {
-  // Add a more comprehensive error handler for postMessage errors
-  window.addEventListener('error', (event) => {
-    // Check for postMessage errors
-    if (
-      event.message && 
-      (event.message.includes('postMessage') || 
-       event.message.includes('Failed to execute') ||
-       event.message.includes('Invalid target origin'))
-    ) {
-      // Prevent the error from showing in console
-      event.preventDefault();
-      event.stopPropagation();
-      return true; // Prevents the error from bubbling up
-    }
-  }, true); // Use capture phase to catch errors early
-  
-  // Add a global unhandledrejection handler for Promise errors
-  window.addEventListener('unhandledrejection', (event) => {
-    // Check if the error is related to postMessage
-    if (
-      event.reason && 
-      event.reason.message && 
-      (event.reason.message.includes('postMessage') || 
-       event.reason.message.includes('Failed to execute') ||
-       event.reason.message.includes('Invalid target origin'))
-    ) {
-      // Prevent the error from showing in console
-      event.preventDefault();
-      event.stopPropagation();
-      return true; // Prevents the error from bubbling up
-    }
-  }, true); // Use capture phase to catch errors early
-}
-
-// Add event listener for AppKit connection events
+// Add WalletConnect specific event listener
 if (typeof window !== 'undefined') {
   window.addEventListener('message', (event) => {
-    // Check if the message is from AppKit
-    if (event.data && typeof event.data === 'object' && 'type' in event.data) {
-      const { type, data } = event.data;
-      
-      // Check for connection events
-      if (type === '@w3m-app/CONNECTED_ACCOUNT_DATA' && data && data.address) {
-        // Dispatch a custom event that our components can listen for
-        const customEvent = new CustomEvent('appkit-connected', { 
-          detail: { address: data.address, type: data.type || 'unknown' } 
-        });
-        window.dispatchEvent(customEvent);
+    if (event.data && typeof event.data === 'object') {
+      // Handle WalletConnect QR code scan events
+      if (event.data.type === 'walletconnect_modal_closed') {
+        console.debug('WalletConnect modal closed');
+      }
+      // Handle WalletConnect connection events
+      if (event.data.type === '@w3m-app/CONNECTED_ACCOUNT_DATA' || 
+          event.data.type === 'walletconnect_connection_success') {
+        const address = event.data.data?.address || event.data.address;
+        const walletType = event.data.data?.type || 'walletconnect';
+        
+        if (address) {
+          const customEvent = new CustomEvent('wallet-state-updated', {
+            detail: {
+              address,
+              connected: true,
+              type: walletType,
+              provider: event.data.data?.provider || 'walletconnect'
+            }
+          });
+          window.dispatchEvent(customEvent);
+        }
       }
     }
   });
 }
 
 // Add a more targeted fix for the contentScript.ts postMessage error
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
   // Create a MutationObserver to watch for script additions
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
@@ -114,14 +90,12 @@ if (typeof window !== 'undefined') {
               node.src && 
               node.src.includes('contentScript.ts')) {
             
-            // Add a script to patch the contentScript's postMessage
+            // Add a script to patch the contentScript's postMessage silently
             const patchScript = document.createElement('script');
             patchScript.textContent = `
               (function() {
-                // Wait for the contentScript to load
                 setTimeout(() => {
                   try {
-                    // Override any postMessage calls with null origin
                     const originalPostMessage = window.postMessage;
                     window.postMessage = function() {
                       try {
@@ -129,13 +103,9 @@ if (typeof window !== 'undefined') {
                           arguments[1] = '*';
                         }
                         return originalPostMessage.apply(this, arguments);
-                      } catch (e) {
-                        return undefined;
-                      }
+                      } catch (e) {}
                     };
-                  } catch (error) {
-                    // Silently fail
-                  }
+                  } catch (error) {}
                 }, 100);
               })();
             `;
@@ -150,10 +120,42 @@ if (typeof window !== 'undefined') {
   observer.observe(document, { childList: true, subtree: true });
 }
 
+// Only add error handlers in production
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+  // Add a more comprehensive error handler for postMessage errors
+  window.addEventListener('error', (event) => {
+    if (
+      event.message && 
+      (event.message.includes('postMessage') || 
+       event.message.includes('Failed to execute') ||
+       event.message.includes('Invalid target origin'))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+  }, true);
+  
+  window.addEventListener('unhandledrejection', (event) => {
+    if (
+      event.reason && 
+      event.reason.message && 
+      (event.reason.message.includes('postMessage') || 
+       event.reason.message.includes('Failed to execute') ||
+       event.reason.message.includes('Invalid target origin'))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+  }, true);
+}
+
 type WalletContextType = {
   address?: string
   isConnected: boolean
   isConnecting: boolean
+  walletType?: string
   connect: () => Promise<void>
   disconnect: () => Promise<void>
 }
@@ -165,14 +167,63 @@ const WalletContext = createContext<WalletContextType>({
   disconnect: async () => {},
 })
 
-export const useWallet = () => useContext(WalletContext)
+export function useWallet() {
+  const context = useContext(WalletContext)
+  if (!context) {
+    throw new Error('useWallet must be used within a WalletProvider')
+  }
+  return context
+}
 
 function WalletProviderInner({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string>()
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
+  const [walletType, setWalletType] = useState<string>()
   const appKit = useAppKit()
   const appKitState = useAppKitState()
+
+  // Add wallet type to the context
+  const contextValue = {
+    address,
+    isConnected,
+    isConnecting,
+    walletType,
+    connect: async () => {
+      try {
+        setIsConnecting(true)
+        await connect()
+      } finally {
+        setIsConnecting(false)
+      }
+    },
+    disconnect: async () => {
+      try {
+        setIsConnecting(true)
+        await disconnect()
+      } finally {
+        setIsConnecting(false)
+      }
+    }
+  }
+
+  // Update the effect to track wallet type
+  useEffect(() => {
+    const handleWalletStateUpdate = (event: any) => {
+      const { address, connected, type } = event.detail;
+      if (address && connected) {
+        setAddress(address);
+        setIsConnected(true);
+        setWalletType(type);
+        setIsConnecting(false);
+      }
+    };
+
+    window.addEventListener('wallet-state-updated', handleWalletStateUpdate);
+    return () => {
+      window.removeEventListener('wallet-state-updated', handleWalletStateUpdate);
+    };
+  }, []);
 
   // Add a more aggressive polling mechanism to check connection state
   useEffect(() => {
@@ -360,7 +411,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       
       // Start an aggressive polling approach to detect connection
       let attempts = 0;
-      const maxAttempts = 10;
+      const maxAttempts = 30; // Increased for QR code scanning
       const checkConnection = async () => {
         attempts++;
         
@@ -382,16 +433,29 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
           currentAppKitState?.data?.address ||
           currentAppKitState?.w3mState?.address;
         
-        // Check for address in session data
-        const sessionAddress = currentAppKitState?.session?.namespaces?.eip155?.accounts?.[0]?.split(':')?.[2];
+        // Check for WalletConnect specific state
+        const wcAddress = currentAppKitState?.data?.address;
+        const wcConnected = currentAppKitState?.data?.type === 'walletconnect';
+        const wcSession = currentAppKitState?.session?.namespaces?.eip155?.accounts?.[0];
         
-        // Check if modal is closed - if it's closed and we have an address, we're connected
+        // Check if modal is closed or we have a WalletConnect session
         const modalClosed = currentAppKitState?.open === false;
+        const hasWalletConnectSession = (wcAddress && wcConnected) || wcSession;
         
-        if ((appKitAddress && modalClosed) || sessionAddress) {
-          setAddress(appKitAddress || sessionAddress);
+        if ((appKitAddress && modalClosed) || hasWalletConnectSession) {
+          const finalAddress = appKitAddress || wcAddress || wcSession?.split(':')?.[2];
+          setAddress(finalAddress);
           setIsConnected(true);
           setIsConnecting(false);
+          
+          // Dispatch connection event
+          window.dispatchEvent(new CustomEvent('wallet-state-updated', {
+            detail: {
+              address: finalAddress,
+              connected: true,
+              type: wcConnected ? 'walletconnect' : 'unknown'
+            }
+          }));
           return true;
         }
         
@@ -415,17 +479,36 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
 
   const disconnect = async () => {
     try {
+      setIsConnecting(true)
       await wagmiDisconnect(config)
       await appKit.close()
       setAddress(undefined)
       setIsConnected(false)
+      setWalletType(undefined)
+      
+      // Dispatch disconnect event
+      window.dispatchEvent(new CustomEvent('wallet-state-updated', {
+        detail: {
+          address: undefined,
+          connected: false,
+          type: undefined
+        }
+      }))
+      
+      // Clear any stored session data
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('wagmi.wallet')
+        localStorage.removeItem('wagmi.connected')
+      }
     } catch (error) {
-      // Silently handle error
+      console.error('Disconnect error:', error)
+    } finally {
+      setIsConnecting(false)
     }
   }
 
   return (
-    <WalletContext.Provider value={{ address, isConnected, connect, disconnect, isConnecting }}>
+    <WalletContext.Provider value={contextValue}>
       {children}
     </WalletContext.Provider>
   )

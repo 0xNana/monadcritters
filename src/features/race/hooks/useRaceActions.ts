@@ -21,7 +21,7 @@ export const useRaceActions = () => {
         functionName: 'createRace',
         args: [size]
       }),
-      'Creating new race...'
+      'Creating new clash...'
     );
   };
 
@@ -47,7 +47,7 @@ export const useRaceActions = () => {
         args: [BigInt(raceId), BigInt(Number(raceSize)), BigInt(critterId), BigInt(boostAmount)],
         value: raceTypeInfo.entryFee
       }),
-      'Joining race...'
+      'Joining clash...'
     );
   };
 
@@ -62,7 +62,7 @@ export const useRaceActions = () => {
           functionName: 'startRaceExternal',
           args: [BigInt(raceId)]
         }),
-        'Starting race...'
+        'Starting clash...'
       );
     } finally {
       setProcessing(false);
@@ -80,7 +80,7 @@ export const useRaceActions = () => {
           functionName: 'endRace',
           args: [BigInt(raceId)]
         }),
-        'Processing race results...'
+        'Processing clash results...'
       );
     } finally {
       setProcessing(false);

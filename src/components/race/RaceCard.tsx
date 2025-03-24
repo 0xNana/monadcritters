@@ -38,19 +38,19 @@ export const RaceCard: React.FC<RaceCardProps> = ({
   
   // Get button states
   const getJoinButtonState = () => {
-    if (isUserInRace) return { disabled: true, tooltip: "You're already in a race of this type" };
-    if (!isRaceActive) return { disabled: true, tooltip: "No active race available" };
-    if (isFull) return { disabled: true, tooltip: "This race is full" };
-    if (isLoading) return { disabled: true, tooltip: "Loading race data..." };
-    return { disabled: false, tooltip: "Join this race" };
+    if (isUserInRace) return { disabled: true, tooltip: "You're already in a clash of this type" };
+    if (!isRaceActive) return { disabled: true, tooltip: "No active clash available" };
+    if (isFull) return { disabled: true, tooltip: "This clash is full" };
+    if (isLoading) return { disabled: true, tooltip: "Loading clash data..." };
+    return { disabled: false, tooltip: "Join this clash" };
   };
 
   const getCreateButtonState = () => {
-    if (isRaceActive && !isFull) return { disabled: true, tooltip: "A race is already active" };
-    if (isCreatingRace) return { disabled: true, tooltip: "Creating a new race..." };
-    if (isLoading) return { disabled: true, tooltip: "Loading race data..." };
-    if (isUserInRace) return { disabled: true, tooltip: "You're already in a race" };
-    return { disabled: false, tooltip: "Create a new race" };
+    if (isRaceActive && !isFull) return { disabled: true, tooltip: "A clash is already active" };
+    if (isCreatingRace) return { disabled: true, tooltip: "Creating a new clash..." };
+    if (isLoading) return { disabled: true, tooltip: "Loading clash data..." };
+    if (isUserInRace) return { disabled: true, tooltip: "You're already in a clash" };
+    return { disabled: false, tooltip: "Create a new clash" };
   };
 
   const joinButtonState = getJoinButtonState();
@@ -63,7 +63,7 @@ export const RaceCard: React.FC<RaceCardProps> = ({
       whileTap={{ scale: 0.98 }}
     >
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-2xl font-bold text-blue-400">{type} Race</h3>
+        <h3 className="text-2xl font-bold text-blue-400">{type} Clash</h3>
         <div className="px-3 py-1 bg-blue-500/20 rounded-full text-blue-300">
           {currentPlayers}/{maxPlayers}
         </div>
@@ -71,7 +71,7 @@ export const RaceCard: React.FC<RaceCardProps> = ({
 
       {error ? (
         <div className="text-red-400 text-sm mb-4">
-          Network error loading races. Please try again.
+          Network error loading clashes. Please try again.
         </div>
       ) : null}
 
@@ -95,7 +95,7 @@ export const RaceCard: React.FC<RaceCardProps> = ({
         </div>
 
         <div className="flex space-x-2">
-          {/* Join Race Button */}
+          {/* Join Battle Button */}
           <Tooltip content={joinButtonState.tooltip}>
             <button
               onClick={onJoin}
@@ -106,11 +106,11 @@ export const RaceCard: React.FC<RaceCardProps> = ({
                   : 'bg-gradient-to-r from-blue-500 to-blue-700 text-white hover:from-blue-600 hover:to-blue-800'
               }`}
             >
-              {isUserInRace ? 'Already Joined' : 'Join Race'}
+              {isUserInRace ? 'Already Joined' : 'Join Clash'}
             </button>
           </Tooltip>
           
-          {/* Create Race Button */}
+          {/* Create Battle Button */}
           <Tooltip content={createButtonState.tooltip}>
             <button
               onClick={onCreateRace}
@@ -121,17 +121,17 @@ export const RaceCard: React.FC<RaceCardProps> = ({
                   : 'bg-gradient-to-r from-green-500 to-green-700 text-white hover:from-green-600 hover:to-green-800'
               }`}
             >
-              {isCreatingRace ? 'Creating...' : 'Create Race'}
+              {isCreatingRace ? 'Creating...' : 'Create Clash'}
             </button>
           </Tooltip>
         </div>
 
-        {/* Race Status Indicator */}
+        {/* Clash Status Indicator */}
         {isRaceActive && (
           <div className="mt-2 text-center">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-400">
               <span className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
-              Race in Progress
+              Clash in Progress
             </span>
           </div>
         )}

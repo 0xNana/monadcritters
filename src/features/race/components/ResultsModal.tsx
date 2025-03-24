@@ -27,7 +27,7 @@ interface ResultsModalProps {
     startTime?: Date;
     endTime?: Date;
     results?: LeaderboardEntry[];
-    progressStatus?: 'ready' | 'racing' | 'complete';
+    progressStatus?: 'ready' | 'clashing' | 'complete';
     raceStartedAt?: number;
     participants?: {
       player: `0x${string}`;
@@ -88,9 +88,9 @@ const ResultsModal: React.FC<ResultsModalProps> = ({ race, onClose, userAddress 
 
   // Get status message based on error and result source
   const getStatusMessage = () => {
-    if (isLoading) return "Loading race results...";
+    if (isLoading) return "Loading clash results...";
     if (isRateLimit) return "The server is experiencing high traffic. Please wait a moment and try again.";
-    if (isBadRequest) return "Unable to fetch results. The race data might not be available yet.";
+    if (isBadRequest) return "Unable to fetch results. The clash data might not be available yet.";
     if (isCalculating) return `${error?.message || 'Calculating results...'} Please wait.`;
     if (error) return `Error: ${error.message}`;
     if (!formattedResults.length) return "No results available yet. Please try again in a moment.";
@@ -126,7 +126,7 @@ const ResultsModal: React.FC<ResultsModalProps> = ({ race, onClose, userAddress 
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">
-                Race Results ({race.size} Players)
+                 Clash Results ({race.size} Players)
               </h2>
             </div>
             <button 
@@ -228,7 +228,7 @@ const LoadingState = () => (
       transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
       className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"
     />
-    <p className="text-gray-400">Loading race results...</p>
+    <p className="text-gray-400">Loading clash results...</p>
   </div>
 );
 

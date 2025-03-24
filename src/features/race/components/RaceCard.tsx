@@ -75,14 +75,14 @@ export const RaceCard: React.FC<RaceCardProps> = ({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
               </svg>
-              <span className="font-medium">Race in Progress: {countdown}s</span>
+              <span className="font-medium">Clash in Progress: {countdown}s</span>
             </div>
           </div>
         )}
 
         {race.progressStatus === 'complete' && (
           <div className="mb-4 p-3 bg-yellow-500/20 text-yellow-300 rounded-lg text-center">
-            Time's up! Please end the race to see results.
+            Time's up! Please end the clash to see results.
           </div>
         )}
 
@@ -94,14 +94,14 @@ export const RaceCard: React.FC<RaceCardProps> = ({
                 disabled={!canStart || race.progressStatus === 'racing'}
                 className="w-full py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-medium hover:from-green-600 hover:to-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Start Race
+                Start Clash
               </button>
               <button
                 onClick={() => onEndRace(race.id)}
                 disabled={!canEndRace}
                 className="w-full py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-lg font-medium hover:from-red-600 hover:to-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                End Race
+                End Clash
               </button>
             </>
           )}

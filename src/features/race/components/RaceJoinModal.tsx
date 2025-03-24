@@ -62,12 +62,12 @@ export function RaceJoinModal({
     }
     
     if (speedBoosts > availableBoosts) {
-      toast.error(`You only have ${availableBoosts} speed boosts available`);
+      toast.error(`You only have ${availableBoosts} energy boosts available`);
       return;
     }
 
     if (speedBoosts > 2) {
-      toast.error('Maximum 2 speed boosts per race');
+      toast.error('Maximum 2 energy boosts per clash');
       return;
     }
 
@@ -76,8 +76,7 @@ export function RaceJoinModal({
       await onJoin(selectedCritter.id, speedBoosts);
       onClose();
     } catch (error) {
-      console.error('Error joining race:', error);
-      toast.error('Failed to join race');
+      toast.error('Failed to join clash');
     } finally {
       setIsSubmitting(false);
     }
@@ -96,7 +95,7 @@ export function RaceJoinModal({
           className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl border border-gray-700"
         >
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-white">Join Race</h2>
+            <h2 className="text-2xl font-bold text-white">Join Clash</h2>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-white transition-colors"
@@ -106,7 +105,7 @@ export function RaceJoinModal({
             </button>
           </div>
 
-          {/* Race Info */}
+          {/* Clash Info */}
           <div className="mb-6">
             <div className="grid grid-cols-2 gap-4 p-4 bg-gray-700/30 rounded-lg">
               <div>
@@ -163,7 +162,7 @@ export function RaceJoinModal({
           {/* Speed Boost Selection */}
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
-              <label className="text-sm text-gray-400">Speed Boosts (Max 2)</label>
+              <label className="text-sm text-gray-400">Energy Boosts (Max 2)</label>
               <span className="text-sm text-gray-400">Available: {availableBoosts}</span>
             </div>
             <div className="flex space-x-4">
@@ -189,7 +188,7 @@ export function RaceJoinModal({
             {speedBoosts > 0 && (
               <div className="mt-2 text-sm">
                 <span className="text-blue-400">+{speedBoostBonus}</span>
-                <span className="text-gray-400"> to final race score</span>
+                <span className="text-gray-400"> to final clash score</span>
               </div>
             )}
           </div>
@@ -204,7 +203,7 @@ export function RaceJoinModal({
                 : 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800'
             } text-white rounded-lg font-medium transition-colors`}
           >
-            {isSubmitting ? 'Joining Race...' : 'Join Race'}
+            {isSubmitting ? 'Joining Clash...' : 'Join Clash'}
           </button>
         </motion.div>
       </div>

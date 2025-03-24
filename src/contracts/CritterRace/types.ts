@@ -28,6 +28,7 @@ export interface RaceResult {
 }
 
 export interface RaceInfo {
+    calculatedResults: any;
     id: bigint;
     raceSize: RaceSize;
     players: `0x${string}`[];

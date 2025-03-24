@@ -48,11 +48,15 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         }
+      },
+      hmr: {
+        overlay: false
       }
     },
     define: {
       'process.env': env
     },
     assetsInclude: ['**/*.png', '**/*.jpg', '**/*.jpeg', '**/*.gif', '**/*.svg', '**/*.ico'],
+    logLevel: 'error'
   }
 }); 
