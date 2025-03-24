@@ -459,7 +459,7 @@ export default function RaceLobbyPage() {
           );
           
           if (userResult) {
-            navigate('/race');
+            navigate('/clash-arena');
           }
         }
       } catch (error) {
@@ -1008,7 +1008,7 @@ export default function RaceLobbyPage() {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/race')}
+                onClick={() => navigate('/clash-arena')}
                 className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl transform transition-all shadow-lg hover:shadow-green-500/25 font-medium text-lg"
               >
                 Go to Clash View

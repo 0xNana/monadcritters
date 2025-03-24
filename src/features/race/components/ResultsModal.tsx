@@ -115,6 +115,12 @@ const ResultsModal: React.FC<ResultsModalProps> = ({ race, onClose, userAddress 
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+        onClick={(e) => {
+          // Close modal when clicking the backdrop
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
@@ -131,17 +137,17 @@ const ResultsModal: React.FC<ResultsModalProps> = ({ race, onClose, userAddress 
             </div>
             <button 
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="p-2 hover:bg-gray-700/50 rounded-lg transition-colors group"
               aria-label="Close modal"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
           {/* Content */}
-          <div className="relative">
+          <div className="relative max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
           {isLoading ? (
               <LoadingState />
           ) : shouldShowRetry ? (
@@ -213,6 +219,18 @@ const ResultsModal: React.FC<ResultsModalProps> = ({ race, onClose, userAddress 
                 No results available
             </div>
           )}
+          </div>
+
+          {/* Bottom close button */}
+          <div className="mt-6 flex justify-center">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onClose}
+              className="px-8 py-3 bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/30 hover:to-blue-500/30 text-white rounded-xl transform transition-all border border-purple-500/30 hover:border-purple-500/50 font-medium"
+            >
+              Close Results
+            </motion.button>
           </div>
         </motion.div>
       </motion.div>

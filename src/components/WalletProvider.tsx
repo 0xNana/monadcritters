@@ -44,7 +44,8 @@ createAppKit({
     emailShowWallets: true
   },
   allWallets: 'SHOW',
-  includeWalletIds: ['walletconnect', 'injected', 'phantom', 'metamask', 'coinbase']
+  includeWalletIds: [],
+  excludeWalletIds: []
 })
 
 // Add WalletConnect specific event listener
@@ -254,10 +255,13 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       }
     };
     
-    // Start polling when component mounts
-    checkInterval = window.setInterval(checkConnectionState, 1000);
+    // Start polling when component mounts, but with a longer interval
+    checkInterval = window.setInterval(checkConnectionState, 3000); // Increased from 1000ms to 3000ms
     
-    // Clean up interval on unmount
+    // Run an initial check
+    checkConnectionState();
+    
+    // Clean up interval on unmount or when appKitState changes
     return () => {
       if (checkInterval) {
         window.clearInterval(checkInterval);
@@ -409,9 +413,11 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       // Open the modal
       await appKit.open()
       
-      // Start an aggressive polling approach to detect connection
+      // Start polling approach with optimized intervals
       let attempts = 0;
-      const maxAttempts = 30; // Increased for QR code scanning
+      const maxAttempts = 20; // Reduced from 30
+      let pollInterval = 1000; // Start with 1 second
+      
       const checkConnection = async () => {
         attempts++;
         
@@ -460,8 +466,9 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         }
         
         if (attempts < maxAttempts) {
-          // Try again after a delay
-          setTimeout(checkConnection, 1000);
+          // Increase polling interval progressively
+          pollInterval = Math.min(pollInterval * 1.5, 5000); // Cap at 5 seconds
+          setTimeout(checkConnection, pollInterval);
         } else {
           setIsConnecting(false);
         }
@@ -469,7 +476,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         return false;
       };
       
-      // Start checking for connection
+      // Start checking for connection with initial 1 second delay
       setTimeout(checkConnection, 1000);
       
     } catch (error) {

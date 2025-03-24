@@ -1444,7 +1444,7 @@ export default function RaceView() {
 
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Participants</span>
+                        <span className="text-gray-400">Players</span>
                         <span className="text-gray-200">{race.currentPlayers}/{race.size}</span>
                       </div>
                       <div className="flex justify-between text-sm">
@@ -1550,7 +1550,7 @@ export default function RaceView() {
                         ))}
                         {race.results.length > 3 && (
                           <div className="text-center text-sm text-gray-400 mt-2">
-                            Click "View Results" to see all {race.results.length} participants
+                            Click "View Results" to see all {race.results.length} players
                           </div>
                         )}
                       </div>
@@ -1623,7 +1623,7 @@ export default function RaceView() {
                           Clash #{race.id.toString()}
                         </span>
                         <span className="ml-2 px-2 py-1 text-xs rounded-full bg-gray-600/50 text-gray-300">
-                          {race.size} Participants
+                          {race.size} Players
                         </span>
                       </div>
                       <div className="text-right">

@@ -135,33 +135,35 @@ export function ConnectButton() {
       // Call the connect function from WalletProvider
       await connect();
 
-      // Add specific handling for WalletConnect
-      const checkWalletConnectState = async () => {
+      // Add specific handling for WalletConnect and mobile wallets
+      const checkWalletState = async () => {
         const wcAddress = (appKitState as any)?.data?.address;
         const wcConnected = (appKitState as any)?.data?.type === 'walletconnect';
         const wcSession = (appKitState as any)?.session?.namespaces?.eip155?.accounts?.[0];
+        const mobileWallet = (appKitState as any)?.data?.type === 'mobile';
         
-        if ((wcAddress && wcConnected) || wcSession) {
-          setLocalAddress(wcAddress || wcSession?.split(':')[2]);
+        if ((wcAddress && wcConnected) || wcSession || mobileWallet) {
+          const finalAddress = wcAddress || wcSession?.split(':')[2] || (appKitState as any)?.data?.address;
+          setLocalAddress(finalAddress);
           setLocalConnected(true);
           
           // Dispatch wallet connection event
           window.dispatchEvent(new CustomEvent('wallet-state-updated', {
             detail: {
-              address: wcAddress || wcSession?.split(':')[2],
+              address: finalAddress,
               connected: true,
-              type: 'walletconnect'
+              type: mobileWallet ? 'mobile' : (wcConnected ? 'walletconnect' : 'unknown')
             }
           }));
         }
       };
 
-      // Poll for WalletConnect state changes
+      // Poll for wallet state changes with increased attempts for mobile
       let attempts = 0;
-      const maxAttempts = 30; // Increase max attempts for QR code scanning
+      const maxAttempts = 60; // Increased for mobile wallet scanning
       const pollInterval = setInterval(async () => {
         attempts++;
-        await checkWalletConnectState();
+        await checkWalletState();
         
         if (attempts >= maxAttempts) {
           clearInterval(pollInterval);
@@ -175,14 +177,16 @@ export function ConnectButton() {
     }
   }, [appKitState, connect]);
 
-  // Add WalletConnect specific state watcher
+  // Add mobile wallet specific state watcher
   useEffect(() => {
     const wcAddress = (appKitState as any)?.data?.address;
     const wcConnected = (appKitState as any)?.data?.type === 'walletconnect';
     const wcSession = (appKitState as any)?.session?.namespaces?.eip155?.accounts?.[0];
+    const mobileWallet = (appKitState as any)?.data?.type === 'mobile';
     
-    if ((wcAddress && wcConnected) || wcSession) {
-      setLocalAddress(wcAddress || wcSession?.split(':')[2]);
+    if ((wcAddress && wcConnected) || wcSession || mobileWallet) {
+      const finalAddress = wcAddress || wcSession?.split(':')[2] || (appKitState as any)?.data?.address;
+      setLocalAddress(finalAddress);
       setLocalConnected(true);
     }
   }, [appKitState]);

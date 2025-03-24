@@ -20,8 +20,8 @@ const MONAD_BACKUP_RPC = 'https://rpc.testnet.monad.xyz/json-rpc'
 
 // Add rate limiting configuration
 const RATE_LIMIT = {
-  MAX_REQUESTS_PER_WINDOW: 30,
-  WINDOW_MS: 15_000,
+  MAX_REQUESTS_PER_WINDOW: 15,
+  WINDOW_MS: 30_000,
   REQUEST_QUEUE: new Map<string, number[]>()
 } as const;
 
@@ -469,28 +469,28 @@ export const contracts = {
 // Cache and retry configuration
 export const CACHE_CONFIG = {
   DURATION: {
-    SHORT: 30_000,     // 30 seconds
-    MEDIUM: 60_000,    // 1 minute
-    LONG: 300_000,     // 5 minutes
-    PERMANENT: 3600_000 // 1 hour
+    SHORT: 60_000,
+    MEDIUM: 180_000,
+    LONG: 600_000,
+    PERMANENT: 3600_000
   },
   RETRY: {
     MAX_ATTEMPTS: 3,
-    BASE_DELAY: 2000,  // 2 seconds
-    MAX_DELAY: 10000,  // 10 seconds
-    JITTER: 0.3        // 30% jitter
+    BASE_DELAY: 2000,
+    MAX_DELAY: 10000,
+    JITTER: 0.3
   },
   BATCH: {
     SIZE: 10,
-    INTERVAL: 1000     // 1 second between batches
+    INTERVAL: 3000
   },
   PREFETCH: {
     ENABLED: true,
-    THRESHOLD: 0.75    // Prefetch when 75% of cache duration has passed
+    THRESHOLD: 0.75
   },
   RATE_LIMIT_FALLBACK: {
-    DURATION: 120_000, // 2 minutes
-    MAX_STALE: 300_000 // 5 minutes
+    DURATION: 120_000,
+    MAX_STALE: 300_000
   }
 } as const;
 
