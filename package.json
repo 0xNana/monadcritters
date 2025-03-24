@@ -17,7 +17,8 @@
     "deploy": "hardhat run scripts/deploy.ts",
     "deploy:testnet": "hardhat run scripts/deploy.ts --network monadTestnet",
     "typechain": "hardhat typechain",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "generate-og": "node scripts/generate-og.js"
   },
   "keywords": [],
   "author": "",
@@ -46,7 +47,8 @@
     "svgo": "^3.2.0",
     "tailwind-merge": "^3.0.2",
     "viem": "^2.23.14",
-    "wagmi": "^2.14.15"
+    "wagmi": "^2.14.15",
+    "canvas": "^2.11.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.0",
