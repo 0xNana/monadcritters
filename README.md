@@ -1,6 +1,8 @@
 # Clash Of Critters 🎮
 
-A blockchain based game where you can mint, clash, and earn with your critters on the Monad testnet.
+Mint. Bet. Win Big. The First Ever NFT Betting Arena on Monad
+
+Powered by Pyth Entropy.
 
 [Live Demo](https://clashofcritters.vercel.app) • [Report Bug](https://github.com/0xNana/monadcritters/issues) • [Request Feature](https://github.com/0xNana/monadcritters/issues)
 
