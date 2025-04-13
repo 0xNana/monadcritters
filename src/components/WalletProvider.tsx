@@ -2,7 +2,7 @@
 
 import { ReactNode, createContext, useContext, useEffect, useState } from 'react'
 import { getAccount, watchAccount, disconnect as wagmiDisconnect } from '@wagmi/core'
-import { config } from '../utils/config'
+import { getConfig } from '../utils/config'
 import { monadTestnet } from '../utils/chains'
 import { createAppKit, useAppKit, useAppKitState } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
@@ -333,7 +333,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
     const checkConnection = async () => {
       try {
         // Check Wagmi connection
-        const account = getAccount(config);
+        const account = getAccount(getConfig());
         
         // If Wagmi shows connected, use that
         if (account.isConnected && account.address) {
@@ -343,7 +343,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         }
         
         // Force a refresh of the connection state
-        const refreshedAccount = getAccount(config);
+        const refreshedAccount = getAccount(getConfig());
         if (refreshedAccount.isConnected && refreshedAccount.address) {
           setAddress(refreshedAccount.address);
           setIsConnected(true);
@@ -358,7 +358,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Watch for account changes from Wagmi
-    const unwatch = watchAccount(config, {
+    const unwatch = watchAccount(getConfig(), {
       onChange(account) {
         if (account.address) {
           setAddress(account.address)
@@ -447,7 +447,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         attempts++;
         
         // Check Wagmi account first
-        const account = getAccount(config)
+        const account = getAccount(getConfig())
         if (account.address) {
           setAddress(account.address)
           setIsConnected(account.isConnected)
@@ -512,7 +512,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   const disconnect = async () => {
     try {
       setIsConnecting(true)
-      await wagmiDisconnect(config)
+      await wagmiDisconnect(getConfig())
       await appKit.close()
       setAddress(undefined)
       setIsConnected(false)

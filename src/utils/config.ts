@@ -2,26 +2,26 @@ import { createConfig, http, fallback } from '@wagmi/core'
 import { monadTestnet } from './chains'
 import { useChains } from 'wagmi'
 // Contract addresses from environment variables
-const MONAD_CRITTER_ADDRESS = process.env.VITE_MONAD_CRITTER_ADDRESS
+const MONAD_CRITTER_ADDRESS = process.env.VITE_MONAD_CRITTER_ADDRESS || import.meta.env?.VITE_MONAD_CRITTER_ADDRESS
 if (!MONAD_CRITTER_ADDRESS) {
-  throw new Error('VITE_MONAD_CRITTER_ADDRESS is not defined in environment variables');
+  console.warn('VITE_MONAD_CRITTER_ADDRESS is not defined in environment variables, using fallback');
 }
 
-const MONAD_CLASH_CONTRACT_ADDRESS = process.env.VITE_CRITTER_CLASH_CORE_ADDRESS
+const MONAD_CLASH_CONTRACT_ADDRESS = process.env.VITE_CRITTER_CLASH_CORE_ADDRESS || import.meta.env?.VITE_CRITTER_CLASH_CORE_ADDRESS
 if (!MONAD_CLASH_CONTRACT_ADDRESS) {
-  throw new Error('VITE_CRITTER_CLASH_CORE_ADDRESS is not defined in environment variables');
+  console.warn('VITE_CRITTER_CLASH_CORE_ADDRESS is not defined in environment variables, using fallback');
 }
 
-const MONAD_CLASH_STATS_ADDRESS = process.env.VITE_CRITTER_CLASH_STATS_ADDRESS
+const MONAD_CLASH_STATS_ADDRESS = process.env.VITE_CRITTER_CLASH_STATS_ADDRESS || import.meta.env?.VITE_CRITTER_CLASH_STATS_ADDRESS
 if (!MONAD_CLASH_STATS_ADDRESS) {
-  throw new Error('VITE_CRITTER_CLASH_STATS_ADDRESS is not defined in environment variables');
+  console.warn('VITE_CRITTER_CLASH_STATS_ADDRESS is not defined in environment variables, using fallback');
 }
 
 // RPC Configuration
-const MONAD_PRIMARY_RPC = 'https://lb.drpc.org/ogrpc?network=monad-testnet&dkey=Aqc2SxxCSUZUic_W8QUkq94l8CrHAroR8IETfhHoK236'
-const MONAD_ALCHEMY_RPC1 = 'https://monad-testnet.g.alchemy.com/v2/U9a1eL9onn-ElCqLjV48V74NrDx5jxEi'
-const MONAD_ALCHEMY_RPC2 = 'https://monad-testnet.g.alchemy.com/v2/pADH6KI1Ajlh_1-Fyzc7I30JVHw7lo-F'
-const MONAD_BACKUP_RPC = 'https://rpc.testnet.monad.xyz/json-rpc'
+const MONAD_PRIMARY_RPC = process.env.VITE_MONAD_PRIMARY_RPC || import.meta.env?.VITE_MONAD_PRIMARY_RPC || 'https://lb.drpc.org/ogrpc?network=monad-testnet&dkey=Aqc2SxxCSUZUic_W8QUkq94l8CrHAroR8IETfhHoK236'
+const MONAD_ALCHEMY_RPC1 = process.env.VITE_MONAD_ALCHEMY_RPC1 || import.meta.env?.VITE_MONAD_ALCHEMY_RPC1 || 'https://monad-testnet.g.alchemy.com/v2/U9a1eL9onn-ElCqLjV48V74NrDx5jxEi'
+const MONAD_ALCHEMY_RPC2 = process.env.VITE_MONAD_ALCHEMY_RPC2 || import.meta.env?.VITE_MONAD_ALCHEMY_RPC2 || 'https://monad-testnet.g.alchemy.com/v2/pADH6KI1Ajlh_1-Fyzc7I30JVHw7lo-F'
+const MONAD_BACKUP_RPC = process.env.VITE_MONAD_BACKUP_RPC || import.meta.env?.VITE_MONAD_BACKUP_RPC || 'https://rpc.testnet.monad.xyz/json-rpc'
 
 // Add rate limiting configuration
 const RATE_LIMIT = {
@@ -518,9 +518,9 @@ type ContractConfig = {
 // Contract addresses by network
 export const contracts = {
   monad: {
-    critter: MONAD_CRITTER_ADDRESS,
-    clashCore: MONAD_CLASH_CONTRACT_ADDRESS,
-    clashStats: MONAD_CLASH_STATS_ADDRESS
+    critter: MONAD_CRITTER_ADDRESS || '0xD25308c3F5619F7f4fC82cbfa39a38eCd6eC057A',
+    clashCore: MONAD_CLASH_CONTRACT_ADDRESS || '0xC51Bd76917638926C4D7f9f1DFC1B74a0049b94f',
+    clashStats: MONAD_CLASH_STATS_ADDRESS || '0x4f7fB215FCB6926Cdae216F6E65Cc8ffF7faF185'
   }
 } as const;
 
@@ -588,7 +588,7 @@ export const QUERY_CONFIG = {
   }
 } as const;
 
-// Create custom Monad chain config with Alchemy as primary
+// Create custom Monad chain config with proper fallbacks
 const monadWithPrimary = {
   ...monadTestnet,
   rpcUrls: {
@@ -602,13 +602,26 @@ const monadWithPrimary = {
   },
 };
 
-// Wagmi config with Monad network
-export const config = createConfig({
+// Check if we're in browser context to avoid server-side rendering issues
+const isBrowserContext = typeof window !== 'undefined';
+
+// Safely create the Wagmi config
+export const config = isBrowserContext ? createConfig({
   chains: [monadWithPrimary],
   transports: {
     [monadWithPrimary.id]: monadTransport,
   },
-});
+}) : null; // Return null for server context
+
+// Export a safe getter function to avoid "undefined" errors
+export const getConfig = () => {
+  return config || createConfig({
+    chains: [monadWithPrimary],
+    transports: {
+      [monadWithPrimary.id]: monadTransport,
+    },
+  });
+};
 
 // Game constants
 export const gameConfig = {

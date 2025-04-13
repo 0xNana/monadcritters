@@ -7,7 +7,7 @@ import ClashViewPage from './pages/ClashViewPage';
 import ClashLeaderboardPage from './pages/ClashLeaderboardPage';
 import { Toaster } from 'react-hot-toast';
 import { WagmiConfig } from 'wagmi';
-import { config } from './utils/config';
+import { getConfig } from './utils/config';
 import { WalletProvider } from './components/WalletProvider';
 import { useAccount } from 'wagmi';
 import { ToastProvider } from './components/Toast';
@@ -69,8 +69,11 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  // Get the configuration in a safe way that works in both browser and SSR contexts
+  const safeConfig = getConfig();
+  
   return (
-    <WagmiConfig config={config as any}>
+    <WagmiConfig config={safeConfig}>
       <WalletProvider>
         <ReferralProvider>
           <ClashPointsProvider>
