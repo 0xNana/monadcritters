@@ -1,67 +1,28 @@
-import { ReactNode, useState } from 'react'
+import React, { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ConnectButton } from './ConnectButton'
 import { useWallet } from './WalletProvider'
 import { motion } from 'framer-motion'
-import { Bars3Icon } from '@heroicons/react/24/outline'
+import { 
+  Bars3Icon,  
+  TrophyIcon,
+  FireIcon,
+  UsersIcon,
+  ClipboardDocumentListIcon
+} from '@heroicons/react/24/outline'
 import { MobileMenu } from './MobileMenu'
-import { useAccount } from 'wagmi'
-import React from 'react'
+import { useState } from 'react'
 
-
-type NavLink = {
-  to: string
-  label: string
-  comingSoon?: boolean
-}
-
-const NAV_LINKS: NavLink[] = [
-  { to: '/', label: 'Home' },
-  { to: '/mint', label: 'Mint' },
-  { to: '/lobby', label: 'Lobby' },
-  { to: '/clash-arena', label: 'Clash Arena' },
-  { to: '/leaderboard', label: 'Leaderboard' },
+export const navigation = [
+  { name: 'Lobby', href: '/clashes', icon: UsersIcon },
+  { name: 'Clash View', href: '/clash-view', icon: ClipboardDocumentListIcon },
+  { name: 'Leaderboard', href: '/clash/leaderboard', icon: TrophyIcon },
 ]
-
-type NavLinkProps = {
-  to: string
-  children: ReactNode
-  comingSoon?: boolean
-}
-
-function NavLink({ to, children, comingSoon = false }: NavLinkProps) {
-  const location = useLocation()
-  const isActive = location.pathname === to
-
-  return (
-    <div className="relative group">
-      <Link
-        to={to}
-        className={`
-          px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap
-          ${comingSoon ? 'opacity-50 cursor-not-allowed' : ''}
-          ${isActive
-            ? 'bg-purple-500 text-white'
-            : 'text-gray-300 hover:text-white hover:bg-purple-500/20'
-          }
-        `}
-        onClick={comingSoon ? (e) => e.preventDefault() : undefined}
-      >
-        {children}
-      </Link>
-      {comingSoon && (
-        <div className="absolute -top-2 -right-2 px-2 py-0.5 bg-purple-500 rounded-full text-[10px] font-medium text-white whitespace-nowrap">
-          Coming Soon
-        </div>
-      )}
-    </div>
-  )
-}
 
 export function Layout({ children }: { children: ReactNode }) {
   const { isConnected } = useWallet()
-  const location = useLocation()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const location = useLocation()
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-purple-900 to-black text-white">
@@ -78,21 +39,36 @@ export function Layout({ children }: { children: ReactNode }) {
               <div className="flex items-center">
                 <Link 
                   to="/" 
-                  className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 whitespace-nowrap"
+                  className="flex items-center gap-2 text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 hover:scale-105 transition-transform whitespace-nowrap"
                 >
+                  <FireIcon className="w-5 h-5 text-blue-400" />
                   Clash Of Critters
                 </Link>
               </div>
 
               {/* Navigation Links - Center */}
               <div className="flex items-center justify-center">
-                <div className="flex items-center space-x-6">
-                  {NAV_LINKS.map(link => (
-                    <NavLink key={link.to} to={link.to} comingSoon={link.comingSoon}>
-                      {link.label}
-                    </NavLink>
-                  ))}
-                </div>
+                <nav className="flex space-x-4">
+                  {navigation.map((item) => {
+                    const isActive = location.pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className={`
+                          flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                          ${isActive 
+                            ? 'bg-purple-600/20 text-white' 
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                          }
+                        `}
+                      >
+                        <item.icon className="w-4 h-4" />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </nav>
               </div>
 
               {/* Right Section */}
@@ -105,8 +81,9 @@ export function Layout({ children }: { children: ReactNode }) {
             <div className="h-full md:hidden flex items-center justify-between">
               <Link 
                 to="/" 
-                className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 whitespace-nowrap"
+                className="flex items-center gap-2 text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 whitespace-nowrap"
               >
+                <FireIcon className="w-5 h-5 text-blue-400" />
                 Clash Of Critters
               </Link>
               
@@ -131,40 +108,24 @@ export function Layout({ children }: { children: ReactNode }) {
       <footer className="py-8 px-4 text-center text-gray-400 text-sm border-t border-white/10">
         <div className="flex items-center justify-center gap-2 mb-4">
           <img src="/monad-logo.svg" alt="Monad" className="w-5 h-5" />
-          <p>Built on Monad Testnet • High Performance L1 Blockchain</p>
+          <p>Built on Monad Testnet • Powered by Pyth Network</p>
         </div>
         <div className="flex items-center justify-center space-x-6">
           <a
-            href="https://x.com/0xElegant"
+            href="https://x.com/CritterClashFi"
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-white transition-colors"
           >
-            𝕏 Twitter
+            Follow 𝕏 (CritterClashFi)
           </a>
           <a
-            href="https://t.me/Elegant_CF"
+            href="https://t.me/clashofcritters/1"
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-white transition-colors"
           >
             Telegram
-          </a>
-          <a
-            href="https://github.com/0xNana"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            GitHub
-          </a>
-          <a
-            href="https://discord.com/users/0xElegant"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            Discord
           </a>
         </div>
       </footer>
@@ -172,7 +133,6 @@ export function Layout({ children }: { children: ReactNode }) {
       <MobileMenu
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
-        links={NAV_LINKS}
       />
     </div>
   )

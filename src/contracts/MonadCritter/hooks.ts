@@ -585,7 +585,7 @@ export function useOwnedCritters(ownerAddress?: Address) {
 }
 
 // Hook to get balance of critters for an address
-export function useBalanceOf(address?: Address) {
+export function useBalanceOf(address?: Address, options?: { query?: any }) {
   const contractAddress = useContractAddress();
   
   return useWagmiReadContract({
@@ -595,6 +595,7 @@ export function useBalanceOf(address?: Address) {
     args: address ? [address] : undefined,
     query: {
       enabled: !!address,
+      ...options?.query
     },
   });
 }
@@ -692,7 +693,7 @@ export function useMintCritter() {
     address: contractAddress,
     abi,
     functionName: 'mint',
-    value: BigInt('10000000000000000'), // 0.01 MON from contract
+    value: BigInt('10000000000000000'), // 0.1 MON from contract
   });
 
   const { writeContract, ...rest } = useWagmiWriteContract();

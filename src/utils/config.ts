@@ -7,9 +7,14 @@ if (!MONAD_CRITTER_ADDRESS) {
   throw new Error('VITE_MONAD_CRITTER_ADDRESS is not defined in environment variables');
 }
 
-const MONAD_RACE_CONTRACT_ADDRESS = process.env.VITE_RACE_CONTRACT_ADDRESS
-if (!MONAD_RACE_CONTRACT_ADDRESS) {
-  throw new Error('VITE_RACE_CONTRACT_ADDRESS is not defined in environment variables');
+const MONAD_CLASH_CONTRACT_ADDRESS = process.env.VITE_CRITTER_CLASH_CORE_ADDRESS
+if (!MONAD_CLASH_CONTRACT_ADDRESS) {
+  throw new Error('VITE_CRITTER_CLASH_CORE_ADDRESS is not defined in environment variables');
+}
+
+const MONAD_CLASH_STATS_ADDRESS = process.env.VITE_CRITTER_CLASH_STATS_ADDRESS
+if (!MONAD_CLASH_STATS_ADDRESS) {
+  throw new Error('VITE_CRITTER_CLASH_STATS_ADDRESS is not defined in environment variables');
 }
 
 // RPC Configuration
@@ -20,10 +25,41 @@ const MONAD_BACKUP_RPC = 'https://rpc.testnet.monad.xyz/json-rpc'
 
 // Add rate limiting configuration
 const RATE_LIMIT = {
-  MAX_REQUESTS_PER_WINDOW: 15,
-  WINDOW_MS: 30_000,
-  REQUEST_QUEUE: new Map<string, number[]>()
+  MAX_REQUESTS_PER_WINDOW: 20,
+  WINDOW_MS: 60_000,
+  REQUEST_QUEUE: new Map<string, number[]>(),
+  QUEUE_SIZE: 200,
+  QUEUE_TIMEOUT: 30_000
 } as const;
+
+// Add request queue management with improved error handling
+const requestQueue = new Map<string, Array<() => Promise<any>>>();
+const processingQueue = new Map<string, boolean>();
+
+const processQueue = async (endpoint: string) => {
+  if (processingQueue.get(endpoint)) return;
+  processingQueue.set(endpoint, true);
+
+  try {
+    const queue = requestQueue.get(endpoint) || [];
+    while (queue.length > 0) {
+      const request = queue.shift();
+      if (request) {
+        try {
+          await request();
+          // Add adaptive delay between requests based on queue size
+          const delay = Math.min(100 + (queue.length * 10), 1000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } catch (error) {
+          console.error('Error processing queued request:', error);
+          // Don't throw here to continue processing the queue
+        }
+      }
+    }
+  } finally {
+    processingQueue.set(endpoint, false);
+  }
+};
 
 // Add transport metrics tracking
 const transportMetrics = new Map<string, {
@@ -102,27 +138,28 @@ const createRateLimitedTransport = (url: string, config: any) => {
   const shouldRetryError = (error: any): boolean => {
     const errorType = classifyError(error);
     
+    // Always retry rate limit errors
     if (errorType === ERROR_TYPES.RATE_LIMIT) {
       return true;
     }
     
+    // Retry server errors with backoff
     if (Array.isArray(ERROR_TYPES.SERVER_ERROR) && 
         ERROR_TYPES.SERVER_ERROR.some(code => error?.status?.toString() === code)) {
       return true;
     }
     
-    if (errorType === ERROR_TYPES.TIMEOUT) {
+    // Retry network errors
+    if (errorType === ERROR_TYPES.TIMEOUT || errorType === ERROR_TYPES.NETWORK) {
       return true;
     }
     
-    if (errorType === ERROR_TYPES.NETWORK) {
-      return true;
-    }
-    
+    // Don't retry bad requests
     if (errorType === ERROR_TYPES.BAD_REQUEST) {
       return false;
     }
     
+    // Retry on specific error messages
     if (error?.message?.includes('Too many request') || 
         error?.message?.includes('rate limit') ||
         error?.message?.includes('try again later')) {
@@ -133,18 +170,21 @@ const createRateLimitedTransport = (url: string, config: any) => {
   };
 
   const getBackoff = (attempt: number, errorType: string): number => {
-    const baseDelay = 1000;
+    const baseDelay = 2000;
     
+    // More aggressive backoff for rate limits
     if (errorType === ERROR_TYPES.RATE_LIMIT) {
-      return Math.min(baseDelay * Math.pow(2, attempt), 10000);
+      return Math.min(baseDelay * Math.pow(2, attempt), 30000);
     }
     
+    // Moderate backoff for server errors
     if (Array.isArray(ERROR_TYPES.SERVER_ERROR) && 
         ERROR_TYPES.SERVER_ERROR.some(code => errorType === code)) {
-      return Math.min(baseDelay * Math.pow(1.5, attempt), 8000);
+      return Math.min(baseDelay * Math.pow(1.5, attempt), 20000);
     }
     
-    return baseDelay * attempt;
+    // Standard backoff for other errors
+    return Math.min(baseDelay * attempt, 15000);
   };
 
   const formatRequestForBrowser = (args: any[]): any[] => {
@@ -301,10 +341,26 @@ const createRateLimitedTransport = (url: string, config: any) => {
         }
 
         if (!canMakeRequest(url)) {
-          const metrics = transportMetrics.get(url) || { successes: 0, failures: 0, lastSuccess: 0 };
-          metrics.failures++;
-          transportMetrics.set(url, metrics);
-          throw new Error('Rate limit exceeded');
+          // Queue the request if we're rate limited
+          return new Promise((resolve, reject) => {
+            const queue = requestQueue.get(url) || [];
+            if (queue.length >= RATE_LIMIT.QUEUE_SIZE) {
+              reject(new Error('Request queue is full'));
+              return;
+            }
+
+            queue.push(async () => {
+              try {
+                const response = await config.request?.(...formattedArgs);
+                resolve(response);
+              } catch (error) {
+                reject(error);
+              }
+            });
+
+            requestQueue.set(url, queue);
+            processQueue(url);
+          });
         }
         
         addRequest(url);
@@ -450,8 +506,9 @@ const monadTransport = fallback([
 
 // Contract configuration types
 type NetworkContracts = {
-  race: string;
   critter: string;
+  clashCore: string;
+  clashStats: string;
 };
 
 type ContractConfig = {
@@ -462,7 +519,8 @@ type ContractConfig = {
 export const contracts = {
   monad: {
     critter: MONAD_CRITTER_ADDRESS,
-    race: MONAD_RACE_CONTRACT_ADDRESS
+    clashCore: MONAD_CLASH_CONTRACT_ADDRESS,
+    clashStats: MONAD_CLASH_STATS_ADDRESS
   }
 } as const;
 
@@ -496,7 +554,7 @@ export const CACHE_CONFIG = {
 
 // Query configurations for different types of contract reads
 export const QUERY_CONFIG = {
-  // For data that changes frequently (e.g., race status)
+  // For data that changes frequently
   realtime: {
     refetchInterval: CACHE_CONFIG.DURATION.SHORT,
     gcTime: CACHE_CONFIG.DURATION.MEDIUM,
@@ -512,27 +570,11 @@ export const QUERY_CONFIG = {
       return Math.min(baseDelay * jitter, maxDelay);
     }
   },
-  // For data that changes occasionally (e.g., race participants)
+  // For data that changes occasionally
   standard: {
     refetchInterval: CACHE_CONFIG.DURATION.MEDIUM,
     gcTime: CACHE_CONFIG.DURATION.LONG,
     staleTime: CACHE_CONFIG.DURATION.MEDIUM / 2,
-    retry: (failureCount: number, error: any) => {
-      if (!error?.message?.includes('429')) return false;
-      return failureCount < CACHE_CONFIG.RETRY.MAX_ATTEMPTS;
-    },
-    retryDelay: (failureCount: number) => {
-      const baseDelay = CACHE_CONFIG.RETRY.BASE_DELAY * Math.pow(2, failureCount - 1);
-      const maxDelay = CACHE_CONFIG.RETRY.MAX_DELAY;
-      const jitter = 1 + (Math.random() * 2 - 1) * CACHE_CONFIG.RETRY.JITTER;
-      return Math.min(baseDelay * jitter, maxDelay);
-    }
-  },
-  // For static or rarely changing data (e.g., race configuration)
-  static: {
-    refetchInterval: CACHE_CONFIG.DURATION.LONG,
-    gcTime: CACHE_CONFIG.DURATION.PERMANENT,
-    staleTime: CACHE_CONFIG.DURATION.LONG / 2,
     retry: (failureCount: number, error: any) => {
       if (!error?.message?.includes('429')) return false;
       return failureCount < CACHE_CONFIG.RETRY.MAX_ATTEMPTS;
@@ -572,16 +614,73 @@ export const config = createConfig({
 export const gameConfig = {
   mintPrice: 0.1,
   maxMintsPerWallet: 4,
-  maxBoostsPerRace: 2,
-  boostPricePercent: 10, // 10% of race entry fee
+  maxBoostsPerClash: 2,
+  boostPricePercent: 10, // 10% of clash entry fee
+  clashDuration: 60, // seconds
+  boostMultiplier: 100
 } as const;
 
-// Race types configuration
-export const RACE_TYPES = [
-  { type: 'TWO', maxPlayers: 2, winners: 1, raceSize: 1, entryFee: '0.1' },
-  { type: 'FIVE', maxPlayers: 5, winners: 2, raceSize: 2, entryFee: '0.1' },
-  { type: 'TEN', maxPlayers: 10, winners: 3, raceSize: 3, entryFee: '0.1' },
-] as const;
+// Payment configuration
+export const PAYMENT_CONFIG = {
+  NATIVE_TOKEN: '0x0000000000000000000000000000000000000000', // address(0) for native MON
+  TOKENS: {
+    NATIVE_MON: {
+      address: '0x0000000000000000000000000000000000000000',
+      isActive: true,
+      entryFeeAmount: 0 // Uses clash type entry fee instead
+    }
+  }
+} as const;
+
+// Clash configuration
+export const CLASH_CONFIG = {
+  TYPES: {
+    TWO_PLAYER: {
+      size: 1, // ClashSize.Two
+      maxPlayers: 2,
+      numWinners: 1,
+      entryFee: '1', // 1 MON for 2-player clash
+      rewardPercentages: [100], // Winner takes all
+      isActive: true
+    },
+    FOUR_PLAYER: {
+      size: 2, // ClashSize.Four
+      maxPlayers: 4,
+      numWinners: 2,
+      entryFee: '2', // 2 MON for 4-player clash
+      rewardPercentages: [70, 30], // Split 70/30
+      isActive: true
+    }
+  },
+  BOOST: {
+    MAX_PER_CLASH: 2,
+    FIRST_BOOST_INCREASE: 20, // 20% increase
+    SECOND_BOOST_INCREASE: 15, // Additional 15% increase
+    COST_CALCULATION: {
+      FIRST_BOOST: 5, // 5% of entry fee
+      SECOND_BOOST: 5  // 5% of entry fee
+    }
+  },
+  FEES: {
+    DAO_PERCENT: 0, // Starts at 0%
+    POWER_UP_PERCENT: 5 // 5% of entry fee
+  },
+  CACHE_KEYS: {
+    ACTIVE_CLASHES: 'active_clashes',
+    CLASH_INFO: (clashId: string) => `clash_info_${clashId}`,
+    USER_CLASH_STATUS: (address: string) => `user_clash_status_${address.toLowerCase()}`,
+    CONTRACT_ADDRESSES: {
+      CRITTER: 'contract_address_critter',
+      CLASH_CORE: 'contract_address_clash_core',
+      CLASH_STATS: 'contract_address_clash_stats'
+    }
+  },
+  CACHE_DURATION: {
+    ACTIVE_CLASHES: 30_000,  // 30 seconds
+    CLASH_INFO: 60_000,      // 1 minute
+    USER_STATUS: 30_000      // 30 seconds
+  }
+} as const;
 
 // Export RPC endpoints for other parts of the application
 export const RPC_ENDPOINTS = {
@@ -592,67 +691,13 @@ export const RPC_ENDPOINTS = {
 // Export chain config
 export { monadWithPrimary as monadTestnet };
 
-// Update cache configuration for race state
-export const RACE_STATE_CONFIG = {
-  CACHE_KEYS: {
-    ACTIVE_RACES: 'active_races',
-    RACE_INFO: (raceId: string) => `race_info_${raceId}`,
-    USER_RACE_STATUS: (address: string) => `user_race_status_${address.toLowerCase()}`
-  },
-  CACHE_DURATION: {
-    ACTIVE_RACES: 30_000,  // 30 seconds
-    RACE_INFO: 60_000,     // 1 minute
-    USER_STATUS: 30_000    // 30 seconds
-  }
-} as const;
-
-// Add race state validation
-export const validateRaceState = (race: any) => {
-  if (!race) return false;
-  
-  // Check if race is properly initialized
-  if (!race.id || !race.players || !Array.isArray(race.players)) {
-    console.warn('Invalid race structure:', race);
-    return false;
-  }
-
-  // Check if race is actually active (has players and not ended)
-  const hasPlayers = race.players.some((p: string) => p !== '0x0000000000000000000000000000000000000000');
-  const isActive = race.isActive && !race.hasEnded;
-  
-  if (!hasPlayers || !isActive) {
-    console.debug('Race validation failed:', { 
-      raceId: race.id,
-      hasPlayers,
-      isActive,
-      players: race.players,
-      status: race.isActive ? 'active' : 'inactive',
-      ended: race.hasEnded
-    });
-    return false;
-  }
-
-  return true;
-};
-
-// Add function to clear race cache
-export const clearRaceCache = () => {
-  try {
-    const keys = Object.keys(localStorage);
-    keys.forEach(key => {
-      if (key.startsWith('race_') || 
-          key === RACE_STATE_CONFIG.CACHE_KEYS.ACTIVE_RACES ||
-          key.startsWith('user_race_status_')) {
-        localStorage.removeItem(key);
-      }
-    });
-    console.log('Race cache cleared successfully');
-  } catch (error) {
-    console.error('Error clearing race cache:', error);
-  }
-};
-
 if (process.env.NODE_ENV !== 'production') {
-  console.debug('Contract addresses:', contracts);
+  console.debug('Contract Configuration:', {
+    addresses: contracts,
+    environment: {
+      VITE_MONAD_CRITTER_ADDRESS: process.env.VITE_MONAD_CRITTER_ADDRESS,
+      VITE_CRITTER_CLASH_CORE_ADDRESS: process.env.VITE_CRITTER_CLASH_CORE_ADDRESS
+    }
+  });
 }
 

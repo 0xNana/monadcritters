@@ -90,16 +90,16 @@ export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletD
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -20 }}
               transition={{ duration: 0.2 }}
-              className="absolute right-0 mt-2 w-72 rounded-xl bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
+              className="absolute right-0 mt-2 w-full min-w-[250px] max-w-[320px] sm:w-72 rounded-xl bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
             >
-              <div className="p-4 relative">
+              <div className="p-3 sm:p-4 relative">
                 {/* Close Button */}
                 <button
                   onClick={onClose}
                   className="absolute top-2 right-2 p-1 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors"
                 >
                   <svg
-                    className="w-5 h-5"
+                    className="w-4 h-4 sm:w-5 sm:h-5"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -114,8 +114,8 @@ export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletD
                 </button>
 
                 {/* Profile Section */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-16 h-16 rounded-full bg-purple-500/20 p-1">
+                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-purple-500/20 p-1">
                     <img
                       src={getWalletIcon()}
                       alt={`${getWalletName()} Icon`}
@@ -123,9 +123,9 @@ export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletD
                     />
                   </div>
                   <div>
-                    <div className="text-lg font-semibold text-white">{truncatedAddress}</div>
-                    <div className="text-sm text-gray-400">{getWalletName()}</div>
-                    <div className="text-sm text-gray-400">
+                    <div className="text-base sm:text-lg font-semibold text-white">{truncatedAddress}</div>
+                    <div className="text-xs sm:text-sm text-gray-400">{getWalletName()}</div>
+                    <div className="text-xs sm:text-sm text-gray-400">
                       {balance ? `${Number(balance.formatted).toFixed(3)} ${balance.symbol}` : '0 MON'}
                     </div>
                   </div>
@@ -135,10 +135,10 @@ export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletD
                 <div className="space-y-2">
                   <button
                     onClick={handleCopyAddress}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors"
+                    className="w-full flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors text-sm sm:text-base"
                   >
                     <svg
-                      className="w-4 h-4"
+                      className="w-3.5 h-3.5 sm:w-4 sm:h-4"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -154,10 +154,10 @@ export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletD
                   </button>
                   <button
                     onClick={handleDisconnect}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-700/50 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-lg transition-colors"
+                    className="w-full flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-700/50 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-lg transition-colors text-sm sm:text-base"
                   >
                     <svg
-                      className="w-4 h-4"
+                      className="w-3.5 h-3.5 sm:w-4 sm:h-4"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

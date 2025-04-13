@@ -23,11 +23,11 @@ const config: HardhatUserConfig = {
     },
     networks: {
         monad: {
-            url: "https://testnet-rpc.monad.xyz/",
-            accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+            url: "https://lb.drpc.org/ogrpc?network=monad-testnet&dkey=Aqc2SxxCSUZUic_W8QUkq94l8CrHAroR8IETfhHoK236",
+            accounts: process.env.MONAD_TESTNET_PRIVATE_KEY ? [process.env.MONAD_TESTNET_PRIVATE_KEY] : [],
             chainId: 10143,
             gas: 10000000,
-            timeout: 160000
+            timeout: 600000  // 5 minutes
         },
         hardhat: {
             chainId: 31337,

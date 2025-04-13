@@ -277,6 +277,11 @@ contract MonadCritter is ERC721Enumerable, Ownable, Pausable {
         
         return (tokenIds, tokenStats_);
     }
+
+    function setTestCritterStats(uint256 tokenId, Stats memory stats) external onlyOwner {
+        require(_exists(tokenId), "Token does not exist");
+        tokenStats[tokenId] = stats;
+    }
 }
 
 interface IMonadCritter {
