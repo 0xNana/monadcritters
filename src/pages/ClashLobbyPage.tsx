@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Component, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAccount } from 'wagmi';
+import { useAccount, useConfig } from 'wagmi';
 import { useWallet } from '../components/WalletProvider';
 import { CRITTER_CLASH_CORE_ABI, CRITTER_CLASH_CORE_ADDRESS } from '../constants/contracts';
 import { useToast } from '../components/Toast';
@@ -106,6 +106,22 @@ export default function ClashLobbyPage() {
   const [selectedCritterId, setSelectedCritterId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('active');
   const { getPlayerBoosts } = useCritterClashCore();
+  
+  // Check if wagmi is properly initialized
+  const [isWeb3Ready, setIsWeb3Ready] = useState(false);
+  const config = useConfig();
+  
+  useEffect(() => {
+    // Check if config exists and is properly initialized
+    if (config && config.chains && config.chains.length > 0) {
+      setIsWeb3Ready(true);
+    } else {
+      console.warn('Wagmi config not ready yet');
+    }
+  }, [config]);
+
+  // Only enable contract calls if web3 is ready
+  const shouldEnableContractCalls = isWeb3Ready && isConnected;
 
   // Get active clashes for both sizes - we'll use direct contract calls for this legacy function
   const { data: activeTwoPlayerClashId, refetch: refetchTwoPlayerClash } = useReadContract({
@@ -114,7 +130,7 @@ export default function ClashLobbyPage() {
     functionName: 'currentActiveClash' as any, // Use type assertion since this is a legacy function
     args: [ClashSize.Two],
     query: {
-      enabled: true
+      enabled: shouldEnableContractCalls
     }
   });
 
@@ -124,7 +140,7 @@ export default function ClashLobbyPage() {
     functionName: 'currentActiveClash' as any, // Use type assertion since this is a legacy function
     args: [ClashSize.Four],
     query: {
-      enabled: true
+      enabled: shouldEnableContractCalls
     }
   });
 
@@ -143,7 +159,7 @@ export default function ClashLobbyPage() {
     functionName: 'getClashInfo',
     args: [typeof activeTwoPlayerClashId === 'bigint' ? activeTwoPlayerClashId : BigInt(0)],
     query: {
-      enabled: !!activeTwoPlayerClashId && typeof activeTwoPlayerClashId === 'bigint' && activeTwoPlayerClashId > BigInt(0)
+      enabled: shouldEnableContractCalls && !!activeTwoPlayerClashId && typeof activeTwoPlayerClashId === 'bigint' && activeTwoPlayerClashId > BigInt(0)
     }
   });
 
@@ -153,7 +169,7 @@ export default function ClashLobbyPage() {
     functionName: 'getClashInfo',
     args: [typeof activeFourPlayerClashId === 'bigint' ? activeFourPlayerClashId : BigInt(0)],
     query: {
-      enabled: !!activeFourPlayerClashId && typeof activeFourPlayerClashId === 'bigint' && activeFourPlayerClashId > BigInt(0)
+      enabled: shouldEnableContractCalls && !!activeFourPlayerClashId && typeof activeFourPlayerClashId === 'bigint' && activeFourPlayerClashId > BigInt(0)
     }
   });
 
@@ -243,7 +259,8 @@ export default function ClashLobbyPage() {
           showToast(`${clashSize === ClashSize.Two ? '2' : '4'} Player Clash is now open for players!`, 'info');
         }
       });
-    }
+    },
+    enabled: shouldEnableContractCalls
   });
 
   useWatchContractEvent({
@@ -265,7 +282,8 @@ export default function ClashLobbyPage() {
           refetchFourPlayerData();
         }
       });
-    }
+    },
+    enabled: shouldEnableContractCalls
   });
 
   // Debug logging for player counts
@@ -298,13 +316,30 @@ export default function ClashLobbyPage() {
   }, [showJoinModal, selectedClashSize, selectedCritterId, twoPlayerClashInfo, fourPlayerClashInfo, activeTwoPlayerClashId, activeFourPlayerClashId]);
 
   // Update the loading state check in the UI
-  const isLoading = isLoadingHasCritter || isLoadingCritters;
+  const isLoading = isLoadingHasCritter || isLoadingCritters || !isWeb3Ready;
 
   // Get all possible clashes - ONLY ACCEPTING_PLAYERS state
   const allClashes = [activeTwoPlayerClash, activeFourPlayerClash].filter((clash): clash is ClashDetail => clash !== null);
 
   // Get user's lobby clashes - This should already filter for ACCEPTING_PLAYERS state clashes only
   const userLobbyClashes = getUserLobbyClashes(allClashes, address);
+
+  // Show a loading state if web3 isn't ready
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">Clash Lobby</h1>
+        <div className="bg-gray-800 rounded-xl p-10 text-center">
+          <div className="animate-pulse flex flex-col items-center">
+            <div className="h-10 w-10 bg-blue-500 rounded-full mb-4"></div>
+            <div className="h-4 w-40 bg-gray-700 rounded mb-2"></div>
+            <div className="h-3 w-32 bg-gray-700 rounded"></div>
+            <p className="mt-4 text-gray-400">Loading clash data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
