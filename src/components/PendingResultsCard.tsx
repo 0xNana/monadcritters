@@ -5,6 +5,7 @@ import { formatEther } from 'viem';
 import { useWriteContract } from 'wagmi';
 import { useCritterClashCore } from '../contracts/CritterClashCore/hooks';
 import { toast } from 'react-hot-toast';
+import { abi } from '../contracts/CritterClashCore/abi';
 
 // Define constants at the top of the file
 const DEGEN_MESSAGES = [
@@ -170,9 +171,14 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
     const loadingToastId = toast.loading(`Completing clash ${clash.id.toString()}...`);
     
     try {
-      // Complete the clash first - this is where the user will sign the transaction
-      // Only show degen overlay AFTER successful transaction submission
-      await completeClashContract(Number(clash.id));
+      // Use writeContract directly instead of the wrapper function
+      // This ensures proper wallet integration for signing
+      await writeContract({
+        address: import.meta.env.VITE_CRITTER_CLASH_CORE_ADDRESS as `0x${string}`,
+        abi,
+        functionName: 'completeClash',
+        args: [BigInt(clash.id)]
+      });
       
       // Record the time we started the process - AFTER successful transaction
       const processStartTime = Date.now();
