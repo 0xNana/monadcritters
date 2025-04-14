@@ -1,11 +1,33 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ClashDetail, ClashState, ClashSize } from '../contracts/CritterClashCore/types';
 import { formatEther } from 'viem';
 import { useWriteContract } from 'wagmi';
 import { useCritterClashCore } from '../contracts/CritterClashCore/hooks';
 import { toast } from 'react-hot-toast';
-import ClashResultsModal from './ClashResultsModal';
+
+// Define constants at the top of the file
+const DEGEN_MESSAGES = [
+  "Calculating your gains (or losses) ",
+  "May the odds be in your favor 🍀",
+  "Go all in or go home 💎",
+  "WAGMI - We're All Gonna Make It 🚀",
+  "No risk no reward 💪",
+  "To the moon! 🌙",
+  "Diamond hands activated 💎🙌",
+  "Checking if you're gonna make it...",
+  "HODL the line! ⚔️",
+  "Wen lambo? Soon™ 🏎️",
+  "Fortune favors the bold 🎯",
+  "This is the way 🗺️",
+  "Summoning the profit gods 🙏",
+  "Copium reserves: FULL 🌿",
+  "Based results incoming... 📈"
+];
+
+// Constants for timing
+const DEGEN_OVERLAY_DURATION = 15000; // 15 seconds
+const MESSAGE_CHANGE_INTERVAL = 2000; // 2 seconds per message
 
 interface PendingResultsCardProps {
   clash: ClashDetail;
@@ -20,23 +42,18 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
   onComplete,
   isCompleting: isCompletingFromProps
 }) => {
-  const [showResultsModal, setShowResultsModal] = useState(false);
   const [completedClash, setCompletedClash] = useState<ClashDetail | null>(null);
   const { writeContract } = useWriteContract();
   const { getClashInfo, completeClash: completeClashContract } = useCritterClashCore();
   const [isCompletingClash, setIsCompletingClash] = useState(false);
-  const [clashData, setClashData] = useState<ClashDetail | null>(null);
   const [isLoadingClash, setIsLoadingClash] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [currentDegenMessage, setCurrentDegenMessage] = useState(DEGEN_MESSAGES[0]);
+  const [showDegenOverlay, setShowDegenOverlay] = useState(false);
 
   // Check if user was a participant in this clash - using the same pattern as CompletedClashCard
   const isUserParticipant = useMemo(() => {
     if (!userAddress || !clash.players || !Array.isArray(clash.players) || clash.players.length === 0) {
-      console.warn(`Clash ${clash.id.toString()}: Invalid player data or user not connected`, {
-        userAddress,
-        playerCount: clash.players?.length || 0,
-        clashId: clash.id.toString()
-      });
       return false;
     }
 
@@ -45,13 +62,6 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
       userAddress && 
       p.player.toLowerCase() === userAddress.toLowerCase()
     );
-
-    if (!participates) {
-      console.warn(`Clash ${clash.id.toString()}: User ${userAddress} is not a participant`, {
-        players: clash.players.map(p => p.player),
-        user: userAddress
-      });
-    }
 
     return participates;
   }, [clash.id, clash.players, userAddress]);
@@ -64,7 +74,6 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
   // Effect to update time remaining
   useEffect(() => {
     if (!clash.startTime) {
-      console.log(`Clash ${clash.id.toString()} has no start time`);
       return;
     }
     
@@ -89,6 +98,20 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
       if (timerInterval) clearInterval(timerInterval);
     };
   }, [clash.startTime, clash.id]);
+
+  // Rotate degen messages
+  useEffect(() => {
+    if (!showDegenOverlay) return;
+    
+    let messageIndex = 0;
+    
+    const messageInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % DEGEN_MESSAGES.length;
+      setCurrentDegenMessage(DEGEN_MESSAGES[messageIndex]);
+    }, MESSAGE_CHANGE_INTERVAL);
+    
+    return () => clearInterval(messageInterval);
+  }, [showDegenOverlay]);
 
   // Check if clash can be completed (60 seconds have passed)
   const canComplete = useMemo(() => {
@@ -142,108 +165,112 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
     }
 
     setIsCompletingClash(true);
-    const loadingToast = toast.loading(`Completing clash ${clash.id.toString()}...`);
+    
+    // Store toast ID so we can dismiss it properly in all cases
+    const loadingToastId = toast.loading(`Completing clash ${clash.id.toString()}...`);
+    
     try {
-      console.log('Completing clash:', clash.id.toString());
-      
-      // Complete the clash first
+      // Complete the clash first - this is where the user will sign the transaction
+      // Only show degen overlay AFTER successful transaction submission
       await completeClashContract(Number(clash.id));
       
-      // Show modal with loading state
-      setShowResultsModal(true);
+      // Record the time we started the process - AFTER successful transaction
+      const processStartTime = Date.now();
       
-      // Poll for results with exponential backoff
-      let attempts = 0;
-      const maxAttempts = 10;
-      const baseInterval = 2000; // 2 seconds base interval
-      const maxInterval = 10000; // Max 10 seconds between polls
+      // Show degen messages overlay only AFTER successful transaction submission
+      setShowDegenOverlay(true);
       
-      const pollForResults = async () => {
-        const cache = new Map();
+      // Dismiss the loading toast after transaction is complete
+      toast.dismiss(loadingToastId);
+      
+      // Get clash info with results
+      let updatedClash;
+      let hasResults = false;
+      
+      try {
+        // Single attempt to get clash info immediately
+        updatedClash = await getClashInfo(Number(clash.id));
         
-        while (attempts < maxAttempts) {
-          try {
-            const updatedClash = await getClashInfo(Number(clash.id));
-            const cacheKey = `${updatedClash.state}-${updatedClash.results?.length}`;
-            
-            // Check cache to avoid processing duplicate data
-            if (cache.has(cacheKey)) {
-              await new Promise(resolve => setTimeout(resolve, Math.min(baseInterval * Math.pow(1.5, attempts), maxInterval)));
-              attempts++;
-              continue;
-            }
-            
-            cache.set(cacheKey, true);
-            
-            console.log('Polling for results:', {
-              clashId: clash.id.toString(),
-              state: updatedClash.state,
-              results: updatedClash.results?.length,
-              attempt: attempts,
-              interval: Math.min(baseInterval * Math.pow(1.5, attempts), maxInterval)
-            });
-            
-            if (updatedClash && 
-                updatedClash.results && 
-                updatedClash.results.length > 0 && 
-                updatedClash.results.some(result => result.score > BigInt(0))) {
-              const formattedClash: ClashDetail = {
-                ...clash,
-                id: updatedClash.id,
-                clashSize: updatedClash.clashSize,
-                state: updatedClash.state,
-                playerCount: Number(updatedClash.playerCount),
-                maxPlayers: Number(updatedClash.clashSize === ClashSize.Two ? 2 : 4),
-                players: updatedClash.players.map((player, index) => ({
-                  player,
-                  critterId: updatedClash.critterIds[index],
-                  score: updatedClash.scores[index],
-                  boost: updatedClash.boosts[index] || BigInt(0)
-                })),
-                results: updatedClash.results,
-                startTime: updatedClash.startTime,
-                totalPrize: getTotalPrizePool(), // Calculate based on entry fees
-                status: 'Completed',
-                hasEnded: true,
-                isProcessed: updatedClash.isProcessed
-              };
-              
-              setCompletedClash(formattedClash);
-              toast.dismiss(loadingToast);
-              toast.success(`Clash ${clash.id.toString()} completed successfully!`);
-              onComplete();
-              return;
-            }
-          } catch (error) {
-            console.error(`Error polling clash ${clash.id.toString()} (attempt ${attempts}):`, error);
-          }
-          
-          // Exponential backoff with max interval
-          await new Promise(resolve => setTimeout(resolve, Math.min(baseInterval * Math.pow(1.5, attempts), maxInterval)));
-          attempts++;
-        }
-        
-        console.log('Failed to get results after', attempts, 'attempts for clash', clash.id.toString());
-        toast.dismiss(loadingToast);
-        toast.error('Results are taking longer than expected. Please check back in a moment.');
-        setShowResultsModal(false);
-        onComplete(); // Still call onComplete to refresh the list
-      };
+        // Check if it already has results
+        hasResults = !!(updatedClash && 
+                      updatedClash.results && 
+                      updatedClash.results.length > 0 && 
+                      updatedClash.results.some(result => result.score > BigInt(0)));
+      } catch (error) {
+        console.error(`Error getting initial clash info:`, error);
+      }
       
-      pollForResults();
+      // Process the clash and transform into proper format if we have results
+      let formattedClash: ClashDetail | null = null;
+      
+      if (hasResults && updatedClash) {
+        formattedClash = {
+          ...clash,
+          id: updatedClash.id,
+          clashSize: updatedClash.clashSize,
+          state: updatedClash.state,
+          playerCount: Number(updatedClash.playerCount),
+          maxPlayers: Number(updatedClash.clashSize === ClashSize.Two ? 2 : 4),
+          players: updatedClash.players.map((player, index) => ({
+            player,
+            critterId: updatedClash.critterIds[index],
+            score: updatedClash.scores[index],
+            boost: updatedClash.boosts[index] || BigInt(0)
+          })),
+          results: updatedClash.results,
+          startTime: updatedClash.startTime,
+          totalPrize: getTotalPrizePool(),
+          status: 'Completed',
+          hasEnded: true,
+          isProcessed: updatedClash.isProcessed
+        };
+        
+        // Store formatted clash for later access
+        setCompletedClash(formattedClash);
+      }
+      
+      // Calculate how long to show the degen overlay
+      const currentTime = Date.now();
+      const timeElapsed = currentTime - processStartTime;
+      const remainingOverlayTime = Math.max(0, DEGEN_OVERLAY_DURATION - timeElapsed);
+      
+      // Show degen overlay for at least DEGEN_OVERLAY_DURATION milliseconds (15 seconds)
+      setTimeout(() => {
+        // Hide the overlay
+        setShowDegenOverlay(false);
+        
+        // Show success message with direction to check completed tab
+        toast.success("Your results are ready! Check the Completed tab to view details.", {
+          duration: 5000,
+          icon: '🏆'
+        });
+        
+        // Notify parent component that we're done
+        onComplete();
+      }, remainingOverlayTime);
     } catch (error) {
       console.error(`Error completing clash ${clash.id.toString()}:`, error);
-      toast.dismiss(loadingToast);
+      // Make sure we dismiss the loading toast
+      toast.dismiss(loadingToastId);
+      
+      // Ensure overlay is not showing in case of error
+      setShowDegenOverlay(false);
       
       let errorMessage = `Failed to complete clash ${clash.id.toString()}`;
       if (error.message) {
-        if (error.message.includes('user rejected')) {
+        if (error.message.includes('user rejected') || 
+            error.message.includes('User denied') || 
+            error.message.includes('rejected transaction')) {
           errorMessage = 'Transaction was rejected';
+        } else if (error.message.includes('insufficient funds') || 
+                  error.message.includes('Insufficient funds')) {
+          errorMessage = 'Insufficient funds to complete transaction';
         } else if (error.message.includes('execution reverted')) {
           errorMessage = 'Transaction failed: Contract execution reverted';
         }
       }
       toast.error(errorMessage);
+      onComplete(); // Still call onComplete to refresh the list
     } finally {
       setIsCompletingClash(false);
     }
@@ -374,18 +401,65 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
         </button>
       </motion.div>
       
-      {/* Results Modal */}
-      {showResultsModal && completedClash && (
-        <ClashResultsModal
-          clash={completedClash}
-          userAddress={userAddress}
-          onClose={() => {
-            setShowResultsModal(false);
-            setCompletedClash(null);
-            onComplete();
-          }}
-        />
-      )}
+      {/* Degen Messages Overlay */}
+      <AnimatePresence>
+        {showDegenOverlay && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 flex items-center justify-center z-50 bg-black/80"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 20 }}
+              className="w-full max-w-lg mx-4 bg-gray-900/90 backdrop-blur-xl p-8 rounded-2xl border border-yellow-500/20 shadow-lg"
+            >
+              {/* Loading animation */}
+              <div className="flex justify-center mb-6">
+                <motion.div 
+                  animate={{ 
+                    rotate: 360,
+                    transition: { 
+                      duration: 2,
+                      ease: "linear",
+                      repeat: Infinity 
+                    }
+                  }}
+                  className="w-20 h-20 rounded-full border-4 border-yellow-500/30 border-t-yellow-500"
+                />
+              </div>
+              
+              {/* Animated degen messages */}
+              <motion.div 
+                className="text-center mb-6"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                key={currentDegenMessage} // This makes the animation trigger on message change
+                transition={{ duration: 0.5 }}
+              >
+                <h3 className="text-2xl font-bold text-yellow-400 mb-2">Processing Clash</h3>
+                <p className="text-lg text-white">{currentDegenMessage}</p>
+              </motion.div>
+              
+              <div className="w-full bg-gray-800/50 rounded-full h-2.5 mb-4">
+                <motion.div 
+                  className="bg-gradient-to-r from-yellow-500 to-orange-500 h-2.5 rounded-full"
+                  initial={{ width: "10%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: DEGEN_OVERLAY_DURATION / 1000, ease: "easeInOut" }}
+                />
+              </div>
+              
+              <p className="text-gray-400 text-center text-sm">Please wait while we calculate the clash results...</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* We no longer show the modal, instead directing users to the Completed tab */}
     </>
   );
 };

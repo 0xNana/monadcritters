@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import { ReactNode, createContext, useContext, useEffect, useState } from 'react'
-import { getAccount, watchAccount, disconnect as wagmiDisconnect } from '@wagmi/core'
+import { getAccount, watchAccount, disconnect as wagmiDisconnect, getConnections } from '@wagmi/core'
 import { monadTestnet } from '../utils/chains'
 import { createAppKit, useAppKit, useAppKitState } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
@@ -515,8 +515,32 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   const disconnect = async () => {
     try {
       setIsConnecting(true)
-      await wagmiDisconnect(wagmiConfig)
+      
+      // Get current connections
+      const connections = getConnections(wagmiConfig)
+      
+      // Disconnect using the standard method - it now handles multiple connectors in v2
+      try {
+        await wagmiDisconnect(wagmiConfig)
+      } catch (disconnectError) {
+        console.warn('Primary disconnect error:', disconnectError)
+        
+        // Try to disconnect each connection individually if the main method fails
+        if (connections?.length > 0) {
+          for (const connection of connections) {
+            try {
+              await wagmiDisconnect(wagmiConfig, { connector: connection.connector })
+            } catch (error) {
+              console.warn(`Failed to disconnect connector: ${error}`)
+            }
+          }
+        }
+      }
+
+      // Close AppKit regardless of the disconnect method result
       await appKit.close()
+      
+      // Update local state
       setAddress(undefined)
       setIsConnected(false)
       setWalletType(undefined)
@@ -534,6 +558,12 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('wagmi.wallet')
         localStorage.removeItem('wagmi.connected')
+        // Clear WalletConnect items
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('wc@') || key.includes('walletconnect')) {
+            localStorage.removeItem(key)
+          }
+        })
       }
     } catch (error) {
       console.error('Disconnect error:', error)

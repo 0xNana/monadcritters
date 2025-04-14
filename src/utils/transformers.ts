@@ -26,16 +26,10 @@ export const transformClashData = (
 ): ClashDetail | null => {
   // If data is undefined or clashId is 0, return null
   if (!data || clashId === BigInt(0)) {
-    console.log('No clash data available or invalid clash ID:', {
-      clashId: clashId.toString(),
-      data
-    });
     return null;
   }
 
   try {
-    console.log('Original data structure:', data);
-    
     // Handle different response structures from contract
     let clashSize, state, playerCount, startTime, isProcessed, players, critterIds, boosts, scores, results;
     
@@ -55,27 +49,11 @@ export const transformClashData = (
       // Fallback - if response is already an object
       ({ clashSize, state, playerCount, startTime, isProcessed, players, critterIds, boosts, scores, results } = data);
     } else {
-      console.error('Unrecognized data format:', data);
       return null;
     }
-    
-    // Debug logging for raw data
-    console.log('Raw clash data from contract:', {
-      clashId: clashId.toString(),
-      clashSize,
-      state,
-      playerCount: playerCount?.toString(),
-      players,
-      critterIds,
-      boosts,
-      scores,
-      results: results?.length,
-      isProcessed
-    });
 
     // Validate clash size
     if (clashSize !== ClashSize.Two && clashSize !== ClashSize.Four) {
-      console.error('Invalid clash size:', clashSize);
       return null;
     }
 
@@ -94,7 +72,6 @@ export const transformClashData = (
 
     // For ACCEPTING_PLAYERS state (state 0), we need accurate player count
     if (state === ClashState.ACCEPTING_PLAYERS && actualPlayerCount > maxPlayers) {
-      console.error('Invalid player count for ACCEPTING_PLAYERS state:', actualPlayerCount);
       return null;
     }
     
@@ -134,32 +111,15 @@ export const transformClashData = (
     // For ACCEPTING_PLAYERS state, ensure player count matches actual players
     if (state === ClashState.ACCEPTING_PLAYERS) {
       if (playerObjects.length !== actualPlayerCount) {
-        console.error('Mismatch between player objects and actual count:', {
-          objectCount: playerObjects.length,
-          actualCount: actualPlayerCount
-        });
+        // Silent error - no need to log here
       }
     }
-
-    // Log the player objects for debugging
-    console.log('Player objects created from contract data:', playerObjects);
 
     // Get entry fee based on clash size
     const entryFee = getEntryFee(clashSize);
     
     // Calculate total prize based on max players and entry fee
     const totalPrize = BigInt(entryFee.mul(maxPlayers).toString());
-
-    // Debug logging for transformed data
-    console.log('Transformed clash data:', {
-      clashId: clashId.toString(),
-      clashSize,
-      maxPlayers,
-      playerCount: actualPlayerCount,
-      state: typeof state === 'number' ? ClashState[state] : state,
-      totalPrize: totalPrize.toString(),
-      players: playerObjects.length
-    });
     
     // Determine clash status and hasEnded
     const isCompleted = state === ClashState.COMPLETED_WITH_RESULTS;
@@ -181,7 +141,6 @@ export const transformClashData = (
       isProcessed: isProcessed || isCompleted
     };
   } catch (error) {
-    console.error('Error transforming clash data:', error);
     return null;
   }
 }; 

@@ -56,7 +56,7 @@ const config: HardhatUserConfig = {
         browserUrl: "https://testnet.monadexplorer.com"
     },
     etherscan: {
-        enabled: false
+        apiKey: ""
     }
 };
 

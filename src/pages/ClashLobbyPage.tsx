@@ -129,26 +129,6 @@ export default function ClashLobbyPage() {
     }
   });
 
-  // Debug active clash IDs with more detailed information
-  useEffect(() => {
-    console.log('Current Active Clash Debug:', {
-      twoPlayer: {
-        id: activeTwoPlayerClashId ? activeTwoPlayerClashId.toString() : 'none',
-        error: twoPlayerError ? 'Error fetching' : null,
-        rawValue: activeTwoPlayerClashId,
-        type: activeTwoPlayerClashId ? typeof activeTwoPlayerClashId : 'undefined'
-      },
-      fourPlayer: {
-        id: activeFourPlayerClashId ? activeFourPlayerClashId.toString() : 'none',
-        error: fourPlayerError ? 'Error fetching' : null,
-        rawValue: activeFourPlayerClashId,
-        type: activeFourPlayerClashId ? typeof activeFourPlayerClashId : 'undefined'
-      },
-      contractAddress: CRITTER_CLASH_CORE_ADDRESS,
-      timestamp: new Date().toISOString()
-    });
-  }, [activeTwoPlayerClashId, activeFourPlayerClashId, twoPlayerError, fourPlayerError]);
-
   // Get clash info for both sizes
   const { data: twoPlayerClashData, refetch: refetchTwoPlayerData } = useReadContract({
     address: CRITTER_CLASH_CORE_ADDRESS,
@@ -170,73 +150,29 @@ export default function ClashLobbyPage() {
     }
   });
 
-  // Debug raw clash data
-  useEffect(() => {
-    console.log('Raw Clash Data:', {
-      twoPlayer: {
-        id: activeTwoPlayerClashId?.toString(),
-        data: twoPlayerClashData
-      },
-      fourPlayer: {
-        id: activeFourPlayerClashId?.toString(),
-        data: fourPlayerClashData
-      }
-    });
-  }, [twoPlayerClashData, fourPlayerClashData, activeTwoPlayerClashId, activeFourPlayerClashId]);
-
   // Transform clash data with error handling and proper type checking
   const twoPlayerClashInfo = useMemo(() => {
     if (!twoPlayerClashData || !activeTwoPlayerClashId) {
-      console.log('Two Player Clash: No data or ID available', {
-        hasData: !!twoPlayerClashData,
-        hasId: !!activeTwoPlayerClashId
-      });
       return null;
     }
     
     try {
       const transformed = transformClashData(activeTwoPlayerClashId, twoPlayerClashData);
-      console.log('Transformed Two Player Clash:', {
-        id: activeTwoPlayerClashId ? activeTwoPlayerClashId.toString() : 'invalid',
-        state: transformed ? ClashState[transformed.state] : 'unknown',
-        playerCount: transformed?.players.length ?? 0,
-        maxPlayers: transformed?.maxPlayers ?? 0
-      });
       return transformed;
     } catch (error) {
-      console.error('Error transforming two player clash:', {
-        error,
-        clashId: activeTwoPlayerClashId ? activeTwoPlayerClashId.toString() : 'invalid',
-        rawData: twoPlayerClashData
-      });
       return null;
     }
   }, [twoPlayerClashData, activeTwoPlayerClashId]);
 
   const fourPlayerClashInfo = useMemo(() => {
     if (!fourPlayerClashData || !activeFourPlayerClashId) {
-      console.log('Four Player Clash: No data or ID available', {
-        hasData: !!fourPlayerClashData,
-        hasId: !!activeFourPlayerClashId
-      });
       return null;
     }
     
     try {
       const transformed = transformClashData(activeFourPlayerClashId, fourPlayerClashData);
-      console.log('Transformed Four Player Clash:', {
-        id: activeFourPlayerClashId ? activeFourPlayerClashId.toString() : 'invalid',
-        state: transformed ? ClashState[transformed.state] : 'unknown',
-        playerCount: transformed?.players.length ?? 0,
-        maxPlayers: transformed?.maxPlayers ?? 0
-      });
       return transformed;
     } catch (error) {
-      console.error('Error transforming four player clash:', {
-        error,
-        clashId: activeFourPlayerClashId ? activeFourPlayerClashId.toString() : 'invalid',
-        rawData: fourPlayerClashData
-      });
       return null;
     }
   }, [fourPlayerClashData, activeFourPlayerClashId]);
@@ -244,23 +180,11 @@ export default function ClashLobbyPage() {
   // Filter clashes to only show those in ACCEPTING_PLAYERS state
   const activeTwoPlayerClash = useMemo(() => {
     const filtered = twoPlayerClashInfo?.state === ClashState.ACCEPTING_PLAYERS ? twoPlayerClashInfo : null;
-    console.log('Active Two Player Clash (ACCEPTING_PLAYERS only):', {
-      id: twoPlayerClashInfo?.id.toString(),
-      state: twoPlayerClashInfo ? ClashState[twoPlayerClashInfo.state] : 'none',
-      isAccepting: filtered !== null,
-      playerCount: filtered?.players.length ?? 0
-    });
     return filtered;
   }, [twoPlayerClashInfo]);
 
   const activeFourPlayerClash = useMemo(() => {
     const filtered = fourPlayerClashInfo?.state === ClashState.ACCEPTING_PLAYERS ? fourPlayerClashInfo : null;
-    console.log('Active Four Player Clash (ACCEPTING_PLAYERS only):', {
-      id: fourPlayerClashInfo?.id.toString(),
-      state: fourPlayerClashInfo ? ClashState[fourPlayerClashInfo.state] : 'none',
-      isAccepting: filtered !== null,
-      playerCount: filtered?.players.length ?? 0
-    });
     return filtered;
   }, [fourPlayerClashInfo]);
 
@@ -275,13 +199,6 @@ export default function ClashLobbyPage() {
         if (!args) return;
         
         const [clashId, clashSize, state] = args;
-        
-        console.log('Clash Update Event:', {
-          clashId: clashId.toString(),
-          size: ClashSize[clashSize],
-          state: ClashState[state],
-          timestamp: new Date().toISOString()
-        });
         
         // Refetch data based on clash size
         if (clashSize === ClashSize.Two) {
@@ -311,14 +228,6 @@ export default function ClashLobbyPage() {
         if (!args) return;
         
         const [player, clashId, critterId] = args;
-        
-        console.log('Clash Join Event:', {
-          player,
-          clashId: clashId.toString(),
-          critterId: critterId.toString(),
-          isCurrentUser: player.toLowerCase() === address?.toLowerCase(),
-          timestamp: new Date().toISOString()
-        });
         
         // Refetch data if the current user joined
         if (player.toLowerCase() === address?.toLowerCase()) {

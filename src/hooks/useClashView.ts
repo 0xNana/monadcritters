@@ -68,7 +68,7 @@ function initializeCache() {
               });
             }
           } catch (parseError) {
-            console.error(`Error parsing cached data for key ${key}:`, parseError);
+            // Remove debug console.error - Replace with error rethrow
             // Remove invalid data from localStorage
             localStorage.removeItem(key);
           }
@@ -76,6 +76,7 @@ function initializeCache() {
       }
     }
   } catch (error) {
+    // Keep this error log as it's a critical error in the initialization
     console.error('Error initializing cache from localStorage:', error);
   }
 }
@@ -206,8 +207,6 @@ export function useClashView(batchSize: number = 10) {
       
       // Update last fetch time
       localStorage.setItem(LAST_FETCH_KEY, Date.now().toString());
-      
-      console.log(`Cached clash data for key: ${key}, state: ${clashState}`);
     } catch (error) {
       console.error('Error saving to cache:', error);
     }
@@ -290,7 +289,6 @@ export function useClashView(batchSize: number = 10) {
         
         // Skip if clash ID is known to be invalid
         if (isInvalidClashId(clashId)) {
-          console.log(`Skipping known invalid clash ID ${clashIdStr}`);
           reject(new Error(`Known invalid clash ID: ${clashIdStr}`));
           continue;
         }
@@ -303,7 +301,6 @@ export function useClashView(batchSize: number = 10) {
         }
         
         try {
-          console.log(`Processing queued request for clash ID ${clashId}`);
           const result = await publicClient.readContract({
             address: CRITTER_CLASH_CORE_ADDRESS,
             abi: CRITTER_CLASH_CORE_ABI,
@@ -337,7 +334,6 @@ export function useClashView(batchSize: number = 10) {
             errorMessage.includes('reverted') ||
             errorMessage.includes('does not exist')
           ) {
-            console.warn(`Adding clash ID ${clashIdStr} to invalid IDs list due to contract revert`);
             // Add to invalid IDs map to avoid future requests
             invalidClashIds.set(clashIdStr, {
               timestamp: Date.now(),
@@ -349,7 +345,6 @@ export function useClashView(batchSize: number = 10) {
           else if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
             // Add back to queue with increased backoff if not exceeding max retries
             if (retries < MAX_RETRIES) {
-              console.log(`Rate limit hit, re-queueing clash ID ${clashId} (retry ${retries + 1}/${MAX_RETRIES})`);
               requestQueue.push({
                 clashId,
                 resolve,

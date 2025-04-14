@@ -76,13 +76,11 @@ export default function ClashViewPage() {
 
   // Handle refresh with loading state and clear messaging
   const handleRefresh = async () => {
-    console.log('Manual refresh requested');
     refetch();
   };
 
   // Handle completing a clash with better error handling
   const handleCompleteClash = async (clashId: string) => {
-    console.log(`Completing clash with ID: ${clashId}`);
     setIsCompletingClash(clashId);
     try {
       // The actual completion logic happens in PendingResultsCard
