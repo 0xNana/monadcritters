@@ -4,9 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatAddress } from '../utils/format';
 import { ClashDetail, ClashState } from '../contracts/CritterClashCore/types';
 import { useClashResults } from '../hooks/useClashResults';
-import SocialShareButton from './SocialShareButton';
-import { getOrCreateReferralCode } from '../utils/referralUtils';
-import { CPActionType, CP_POINT_VALUES } from '../contexts/ClashPointsContext';
 
 interface ClashResult {
   player: `0x${string}`;
@@ -48,13 +45,6 @@ const LoadingState = () => (
 const ClashResultsModal: React.FC<ClashResultsModalProps> = ({ clash, onClose, userAddress }) => {
   // Use the useClashResults hook for consistent data handling
   const { clashInfo, isLoading: isLoadingResults } = useClashResults(clash.id);
-
-  // Get user's referral code for sharing
-  const userReferralCode = userAddress ? getOrCreateReferralCode(userAddress) : undefined;
-
-  // Add debug logging
-  console.log('Initial clash prop:', clash);
-  console.log('ClashInfo from hook:', clashInfo);
 
   // Helper function to safely check if a player matches the user address
   const isUserPlayer = (playerAddress: string | null | undefined) => {
@@ -134,14 +124,6 @@ const ClashResultsModal: React.FC<ClashResultsModalProps> = ({ clash, onClose, u
       return [];
     }
   }, [clashInfo, clash, userAddress, isLoadingResults]);
-
-  // Find user's result
-  const userResult = useMemo(() => {
-    return formattedResults.find(result => result.isUser);
-  }, [formattedResults]);
-
-  // Log final formatted results
-  console.log('Final formatted results:', formattedResults);
 
   return (
     <AnimatePresence>
@@ -248,26 +230,6 @@ const ClashResultsModal: React.FC<ClashResultsModalProps> = ({ clash, onClose, u
               </div>
             )}
           </div>
-
-          {/* Social Sharing Section */}
-          {userAddress && userResult && (
-            <div className="mt-6 border-t border-gray-700/50 pt-4">
-              <div className="flex flex-col items-center">
-                <p className="text-center text-sm text-gray-400 mb-3">
-                  Share your {userResult.position === 1 ? 'victory' : 'result'} to earn 
-                  <span className="text-yellow-400 font-semibold mx-1">
-                    +{CP_POINT_VALUES[CPActionType.SOCIAL_SHARE]} Clash Points!
-                  </span>
-                </p>
-                <SocialShareButton
-                  type="clash"
-                  position={userResult.position}
-                  reward={userResult.formattedReward}
-                  referralCode={userReferralCode}
-                />
-              </div>
-            </div>
-          )}
 
           {/* Bottom close button */}
           <div className="mt-6 flex justify-center">

@@ -25,14 +25,6 @@ const ClashLeaderboardPage = () => {
 
   const { leaderboard, userRank, isLoading, refetch } = useClashLeaderboard();
 
-  // Debug logs
-  console.log('Debug: Leaderboard Raw Data', { 
-    leaderboardLength: leaderboard.length,
-    isLoading,
-    userRank,
-    sampleEntries: leaderboard.slice(0, 3)
-  });
-
   // Filter leaderboard based on search
   const filteredLeaderboard = React.useMemo(() => {
     // If no search is active, show all entries

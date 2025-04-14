@@ -131,6 +131,13 @@ export const abi = [
     inputs: [],
     outputs: [{ type: 'uint256' }]
   },
+  {
+    name: 'currentActiveClash',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ type: 'uint8', name: 'clashSize' }],
+    outputs: [{ type: 'uint256' }]
+  },
 
   // Write functions
   {

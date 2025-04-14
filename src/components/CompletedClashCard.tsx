@@ -3,9 +3,6 @@ import { formatAddress, formatRelativeTime } from '../utils/format';
 import { formatEther } from 'viem';
 import { ClashDetail, ClashSize } from '../contracts/CritterClashCore/types';
 import { motion } from 'framer-motion';
-import SocialShareButton from './SocialShareButton';
-import { getOrCreateReferralCode } from '../utils/referralUtils';
-import { CPActionType, CP_POINT_VALUES } from '../contexts/ClashPointsContext';
 
 interface CompletedClashCardProps {
   clash: ClashDetail;
@@ -84,9 +81,6 @@ const CompletedClashCard: React.FC<CompletedClashCardProps> = ({ clash, userAddr
     return "Recently completed";
   };
 
-  // Add this inside the component, before the return statement
-  const userReferralCode = userAddress ? getOrCreateReferralCode(userAddress) : undefined;
-
   return (
     <div className="bg-gray-800/50 rounded-xl border border-gray-700/50 overflow-hidden">
       <div className="p-6">
@@ -154,26 +148,6 @@ const CompletedClashCard: React.FC<CompletedClashCardProps> = ({ clash, userAddr
                     ? 'Runner Up!'
                     : 'Better Luck Next Time'}
               </p>
-              
-              {/* Points Info */}
-              <p className="text-xs text-gray-400 mt-1">
-                Share your {Number(userResult.position) === 1 ? 'victory' : 'result'} to earn 
-                <span className="text-yellow-400 font-semibold mx-1">
-                  +{CP_POINT_VALUES[CPActionType.SOCIAL_SHARE]} Clash Points!
-                </span> 
-              </p>
-              
-              {/* Social Share Button */}
-              {userResult && (
-                <div className="mt-4">
-                  <SocialShareButton 
-                    type="clash"
-                    position={Number(userResult.position)}
-                    reward={userResult.reward ? formatEther(userResult.reward) : undefined}
-                    referralCode={userReferralCode}
-                  />
-                </div>
-              )}
             </div>
           )}
         </div>

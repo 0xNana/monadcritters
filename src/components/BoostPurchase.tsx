@@ -8,17 +8,6 @@ export const BoostPurchase = () => {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const { boostBalance, purchaseBoosts, isLoadingBoosts, refetchBoostBalance } = useBoosts();
   
-  // Debug logging - only in development
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('BoostPurchase component state:', {
-        boostBalance,
-        isLoadingBoosts,
-        amount
-      });
-    }
-  }, [boostBalance, isLoadingBoosts, amount]);
-
   // Refresh boost balance when component mounts - only once
   useEffect(() => {
     refetchBoostBalance();

@@ -6,8 +6,8 @@ import ClashLobbyPage from './pages/ClashLobbyPage';
 import ClashViewPage from './pages/ClashViewPage';
 import ClashLeaderboardPage from './pages/ClashLeaderboardPage';
 import { Toaster } from 'react-hot-toast';
-import { WagmiConfig } from 'wagmi';
-import { getConfig } from './utils/config';
+import { WagmiConfig, createConfig, http } from 'wagmi';
+import { monadTestnet } from './utils/chains';
 import { WalletProvider } from './components/WalletProvider';
 import { useAccount } from 'wagmi';
 import { ToastProvider } from './components/Toast';
@@ -69,11 +69,16 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  // Get the configuration in a safe way that works in both browser and SSR contexts
-  const safeConfig = getConfig();
+  // Create the simplest Wagmi config right here to avoid any import issues
+  const wagmiConfig = createConfig({
+    chains: [monadTestnet],
+    transports: {
+      [monadTestnet.id]: http('https://monad-testnet.g.alchemy.com/v2/U9a1eL9onn-ElCqLjV48V74NrDx5jxEi'),
+    },
+  });
   
   return (
-    <WagmiConfig config={safeConfig}>
+    <WagmiConfig config={wagmiConfig}>
       <WalletProvider>
         <ReferralProvider>
           <ClashPointsProvider>

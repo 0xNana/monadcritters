@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ClashDetail, ClashState, ClashSize } from '../contracts/CritterClashCore/types';
 import { formatEther } from 'viem';
@@ -29,8 +29,8 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
   const [isLoadingClash, setIsLoadingClash] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 
-  // Check if user was a participant in this clash - with improved logging
-  const isUserParticipant = React.useMemo(() => {
+  // Check if user was a participant in this clash - using the same pattern as CompletedClashCard
+  const isUserParticipant = useMemo(() => {
     if (!userAddress || !clash.players || !Array.isArray(clash.players) || clash.players.length === 0) {
       console.warn(`Clash ${clash.id.toString()}: Invalid player data or user not connected`, {
         userAddress,
@@ -40,7 +40,6 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
       return false;
     }
 
-    // Check if ANY player matches the user address
     const participates = clash.players.some(p => 
       p && p.player && typeof p.player === 'string' && 
       userAddress && 
@@ -57,7 +56,12 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
     return participates;
   }, [clash.id, clash.players, userAddress]);
 
-  // Effect to update time remaining with better tracking for debugging
+  // Early return if not a participant or not in CLASHING state
+  if (!isUserParticipant || clash.state !== ClashState.CLASHING) {
+    return null;
+  }
+
+  // Effect to update time remaining
   useEffect(() => {
     if (!clash.startTime) {
       console.log(`Clash ${clash.id.toString()} has no start time`);
@@ -81,27 +85,13 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
     updateTimer();
     timerInterval = setInterval(updateTimer, 1000);
     
-    console.log(`Timer started for clash ${clash.id.toString()}: startTime=${Number(clash.startTime)}, endTime=${Number(clash.startTime) + CLASH_DURATION}`);
-    
     return () => {
       if (timerInterval) clearInterval(timerInterval);
-      console.log(`Timer cleared for clash ${clash.id.toString()}`);
     };
   }, [clash.startTime, clash.id]);
 
-  // Don't render anything if user wasn't a participant
-  if (!isUserParticipant) {
-    return null;
-  }
-
-  // Ensure we only show STATE 1 (CLASHING) clashes
-  if (clash.state !== ClashState.CLASHING) {
-    console.log(`Clash ${clash.id.toString()} is not in CLASHING state (state=${clash.state})`);
-    return null;
-  }
-
   // Check if clash can be completed (60 seconds have passed)
-  const canComplete = React.useMemo(() => {
+  const canComplete = useMemo(() => {
     if (!clash.startTime) return false;
     const CLASH_DURATION = 60; // 60 seconds
     const now = Math.floor(Date.now() / 1000);
@@ -266,7 +256,11 @@ const PendingResultsCard: React.FC<PendingResultsCardProps> = ({
 
   // Calculate total prize pool based on entry fee and player count
   const getTotalPrizePool = () => {
-    const entryFee = BigInt('100000000000000000'); // 0.1 MON
+    // Different entry fees based on clash size
+    const entryFee = clash.clashSize === ClashSize.Four 
+      ? BigInt('2000000000000000000') // 2 MON for 4-player clashes
+      : BigInt('1000000000000000000'); // 1 MON for 2-player clashes
+    
     // Use actual player count from clash rather than maxPlayers to ensure accurate prize pool
     return entryFee * BigInt(clash.playerCount);
   };

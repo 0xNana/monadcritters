@@ -25,7 +25,6 @@ const CritterCard: React.FC<CritterCardProps> = ({ critter, isSelected, onClick 
       case 0: return 'Common';
       case 1: return 'Uncommon';
       case 2: return 'Rare';
-      case 3: return 'Epic';
       default: return 'Legendary';
     }
   };
@@ -55,8 +54,8 @@ const CritterCard: React.FC<CritterCardProps> = ({ critter, isSelected, onClick 
       }`}
       onClick={onClick}
     >
-      <div className="flex justify-between items-center mb-1 gap-1">
-        <h3 className="text-sm font-semibold truncate">#{getCritterId(critter)}</h3>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-sm font-semibold">#{getCritterId(critter)}</h3>
         <span className={`px-1.5 py-0.5 rounded text-xs ${getRarityColor(getRarity(critter))}`}>
           {getRarityText(getRarity(critter))}
         </span>

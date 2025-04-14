@@ -26,18 +26,6 @@ const ClashSizeCard: React.FC<ClashSizeCardProps> = ({
   isConnected,
   hasCritter,
 }) => {
-  // Debug the input data
-  React.useEffect(() => {
-    if (clashInfo) {
-      console.log(`${title} Card Data:`, {
-        clashInfo,
-        userAddress,
-        players: clashInfo.players,
-        isUserInClash: userAddress ? clashInfo.players.some(p => p.player.toLowerCase() === userAddress.toLowerCase()) : false
-      });
-    }
-  }, [clashInfo, userAddress, title]);
-
   const {
     playerCount,
     maxPlayers: actualMaxPlayers,

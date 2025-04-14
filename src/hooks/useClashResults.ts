@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useContractRead, usePublicClient, useWatchContractEvent } from 'wagmi';
+import { useWatchContractEvent, useConfig, useReadContract } from 'wagmi';
 import { CRITTER_CLASH_CORE_ADDRESS, CRITTER_CLASH_CORE_ABI } from '../constants/contracts';
 import { ClashDetail, ClashState, ClashResult } from '../contracts/CritterClashCore/types';
 
@@ -48,9 +48,10 @@ const calculateReward = (position: number, playerCount: number, maxPlayers: numb
 
 export const useClashResults = (clashId: bigint) => {
   const [clashInfo, setClashInfo] = useState<ClashDetail | null>(null);
+  const config = useConfig();
 
-  // Get clash info - this includes all necessary data including sorted scores and results
-  const { data: clashData, refetch: refetchClashInfo } = useContractRead({
+  // Get clash info using useReadContract instead of useReadContracts
+  const { data: clashData, refetch: refetchClashInfo } = useReadContract({
     address: CRITTER_CLASH_CORE_ADDRESS,
     abi: CRITTER_CLASH_CORE_ABI,
     functionName: 'getClashInfo',
@@ -168,16 +169,20 @@ export const useClashResults = (clashId: bigint) => {
 export const useMultipleClashResults = (clashIds: bigint[]) => {
   const [pendingClashes, setPendingClashes] = useState<ClashDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const config = useConfig();
 
-  // Get clash info for each clash ID
-  const { data: multiClashData, refetch: refetchMultiClash } = useContractRead({
+  // Get clash info using useReadContract instead of useReadContracts
+  const { data: multiClashData, refetch: refetchMultiClash } = useReadContract({
     address: CRITTER_CLASH_CORE_ADDRESS,
     abi: CRITTER_CLASH_CORE_ABI,
     functionName: 'getClashInfo',
     args: clashIds.length > 0 ? [clashIds[0]] : undefined,
+    query: {
+      enabled: clashIds.length > 0
+    }
   });
 
-  // Watch for clash updates
+  // Watch for clash updates with proper config
   useWatchContractEvent({
     address: CRITTER_CLASH_CORE_ADDRESS,
     abi: CRITTER_CLASH_CORE_ABI,

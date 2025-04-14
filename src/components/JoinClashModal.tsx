@@ -132,15 +132,6 @@ const JoinClashModal: React.FC<JoinClashModalProps> = ({ clashSize, selectedCrit
       const boostCost = !useInventory ? (entryFee * BigInt(boostsToUse) / BigInt(20)) : BigInt(0);
       const totalCost = entryFee + boostCost;
 
-      console.log('Joining clash', {
-        clashSize,
-        tokenId: selectedCritterId,
-        boosts: boostsToUse,
-        useInventory,
-        totalCost: formatEther(totalCost),
-        currentBoostBalance: boostBalance
-      });
-
       // Join the clash with updated parameters
       await writeContract({
         ...contractConfig,

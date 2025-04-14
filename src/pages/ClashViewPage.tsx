@@ -25,59 +25,6 @@ export default function ClashViewPage() {
     refetch
   } = useClashView();
 
-  // Debug logging with more detailed information
-  useEffect(() => {
-    console.log('ClashViewPage state:', {
-      isLoading,
-      error: error?.toString(),
-      pendingCount: groupedClashes.pendingResults.length,
-      completedCount: groupedClashes.completed.length,
-      address,
-      pendingClashes: groupedClashes.pendingResults.map(item => ({ 
-        id: item.id.toString(),
-        state: item.clash.state,
-        players: item.clash.playerCount,
-        startTime: Number(item.clash.startTime),
-        playerAddresses: item.clash.players.map(p => p.player)
-      })),
-      completedClashes: groupedClashes.completed.map(item => ({ 
-        id: item.id.toString(), 
-        state: item.clash.state,
-        isProcessed: item.clash.isProcessed,
-        playerAddresses: item.clash.players.map(p => p.player)
-      }))
-    });
-
-    // Log a warning if we see clashes where the user isn't a participant
-    const checkUserParticipation = () => {
-      if (!address) return;
-
-      // Check pending clashes
-      groupedClashes.pendingResults.forEach(item => {
-        const isParticipant = item.clash.players.some(p => 
-          p.player && p.player.toLowerCase() === address.toLowerCase()
-        );
-
-        if (!isParticipant) {
-          console.warn(`Invalid pending clash detected: user ${address} is not participant in clash ${item.id.toString()}`);
-        }
-      });
-
-      // Check completed clashes
-      groupedClashes.completed.forEach(item => {
-        const isParticipant = item.clash.players.some(p => 
-          p.player && p.player.toLowerCase() === address.toLowerCase()
-        );
-
-        if (!isParticipant) {
-          console.warn(`Invalid completed clash detected: user ${address} is not participant in clash ${item.id.toString()}`);
-        }
-      });
-    };
-
-    checkUserParticipation();
-  }, [groupedClashes, isLoading, error, address]);
-
   // Show contract update message if:
   // 1. We have an error related to invalid clash IDs, or
   // 2. The user has no clashes but might have had them in a previous contract version
@@ -116,11 +63,6 @@ export default function ClashViewPage() {
       pending: groupedClashes.pendingResults.length,
       completed: groupedClashes.completed.length
     };
-    
-    console.log('Tab counts:', counts, {
-      pendingIds: groupedClashes.pendingResults.map(item => item.id.toString()),
-      completedIds: groupedClashes.completed.map(item => item.id.toString())
-    });
     return counts;
   };
 

@@ -4,17 +4,6 @@ import { formatEther } from 'viem';
 
 export const useClashStatus = (clashInfo: ClashDetail | null, userAddress?: string) => {
   const status = useMemo(() => {
-    // Debug logging
-    console.log('useClashStatus input:', { 
-      clashInfo: clashInfo ? {
-        id: clashInfo.id.toString(),
-        players: clashInfo.players,
-        playerCount: clashInfo.playerCount,
-        state: clashInfo.state
-      } : null, 
-      userAddress 
-    });
-
     if (!clashInfo) {
       return {
         playerCount: 0,
@@ -26,20 +15,49 @@ export const useClashStatus = (clashInfo: ClashDetail | null, userAddress?: stri
       };
     }
 
-    // Check if the players array is valid - handle edge cases
-    const validPlayers = Array.isArray(clashInfo.players) && clashInfo.players.length > 0;
+    // Debug: Log clash info and state
+    console.log('Active Clash Debug:', {
+      clashId: clashInfo.id.toString(),
+      state: ClashState[clashInfo.state],
+      rawPlayers: clashInfo.players,
+      maxPlayers: clashInfo.maxPlayers
+    });
+
+    // Check if the players array is valid
+    const validPlayers = Array.isArray(clashInfo.players) ? 
+      clashInfo.players.filter(player => 
+        player && 
+        player.player && 
+        player.player !== '0x0000000000000000000000000000000000000000'
+      ) : [];
     
-    // Safe check for user participation
-    const isUserParticipating = userAddress && validPlayers ? 
-      clashInfo.players.some(player => 
-        player && player.player && 
-        player.player.toLowerCase() === userAddress.toLowerCase()
-      ) : false;
+    // Calculate actual player count from valid players
+    const actualPlayerCount = validPlayers.length;
 
-    // Safe player count calculation
-    const actualPlayerCount = validPlayers ? clashInfo.players.length : clashInfo.playerCount;
+    // Debug: Log player information
+    console.log('Player Count Debug:', {
+      clashId: clashInfo.id.toString(),
+      totalPlayers: clashInfo.players?.length || 0,
+      validPlayers: validPlayers.length,
+      validPlayerAddresses: validPlayers.map(p => p.player),
+      isAcceptingPlayers: clashInfo.state === ClashState.ACCEPTING_PLAYERS
+    });
+    
+    // Check user participation only among valid players
+    const isUserParticipating = userAddress ? 
+      validPlayers.some(player => {
+        const isParticipating = player.player.toLowerCase() === userAddress.toLowerCase();
+        if (isParticipating) {
+          console.log('Found participating user:', {
+            clashId: clashInfo.id.toString(),
+            userAddress,
+            playerAddress: player.player
+          });
+        }
+        return isParticipating;
+      }) : false;
 
-    const result = {
+    const status = {
       playerCount: actualPlayerCount,
       maxPlayers: clashInfo.maxPlayers,
       prizePool: formatEther(clashInfo.totalPrize),
@@ -48,10 +66,14 @@ export const useClashStatus = (clashInfo: ClashDetail | null, userAddress?: stri
       state: clashInfo.state as ClashState
     };
 
-    // Debug output
-    console.log('useClashStatus output:', result);
+    // Debug: Log final status
+    console.log('Clash Status:', {
+      clashId: clashInfo.id.toString(),
+      ...status,
+      state: ClashState[status.state]
+    });
 
-    return result;
+    return status;
   }, [clashInfo, userAddress]);
 
   return status;

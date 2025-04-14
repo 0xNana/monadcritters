@@ -1,9 +1,8 @@
-import { useReadContract, useReadContracts } from 'wagmi';
 import { usePublicClient } from 'wagmi';
 import { MONAD_CRITTER_ABI, MONAD_CRITTER_ADDRESS } from '../constants/contracts';
 import { useAccount } from 'wagmi';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { CACHE_CONFIG } from '../utils/config';
+
 
 interface CritterStats {
   speed: number;
@@ -52,7 +51,7 @@ const processQueue = async () => {
       try {
         await Promise.all(batch.map(fn => fn()));
       } catch (error) {
-        console.error('Error processing batch:', error);
+
         // Continue processing the queue even if a batch fails
       }
       
@@ -144,9 +143,6 @@ export const useUserCritters = () => {
               rarity: isNaN(rarity) ? 0 : rarity
             };
             
-            // Log the actual stats for debugging
-            console.log(`Critter #${id} actual stats:`, processedStats);
-            
             // Update cache with validated stats
             statsCache.set(id, { stats: processedStats, timestamp: now });
             
@@ -161,7 +157,6 @@ export const useUserCritters = () => {
             // If it's a rate limit error, use cached data if available
             if (error.message?.includes('429') || error.message?.includes('rate limit')) {
               if (cachedData) {
-                console.log(`Using cached stats for critter #${id} due to rate limit`);
                 return resolve({
                   id,
                   stats: cachedData.stats,
@@ -220,7 +215,6 @@ export const useUserCritters = () => {
     if (cachedData && (now - cachedData.timestamp) < CACHE_TTL) {
       // If we have recent errors, don't use cache
       if (cachedData.errorCount > 2 && (now - cachedData.timestamp) < 30000) {
-        console.log('Ignoring cache due to recent errors');
       } else {
         return cachedData.tokenIds;
       }

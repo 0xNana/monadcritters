@@ -1,6 +1,7 @@
 export enum ClashSize {
   Two = 1,
-  Four = 2
+  Four = 2,
+  none
 }
 
 export enum ClashState {
@@ -116,4 +117,8 @@ export interface EntropyStorage {
   requestToClash: Record<string, bigint>;
   nextSequenceNumber: bigint;
   entropyFeeBalance: bigint;
+}
+
+export interface ContractFunctions {
+  currentActiveClash(clashSize: ClashSize): Promise<bigint>;
 } 

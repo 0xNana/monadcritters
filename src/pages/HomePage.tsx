@@ -9,7 +9,7 @@ import { parseEther } from 'viem';
 import { abi } from '../contracts/MonadCritter/abi';
 import { useContractAddress } from '../contracts/MonadCritter/hooks';
 
-// Import sprite assets instead of full-size images
+// Import sprite assets
 import commonSprite64 from '/assets/sprites/common-64.png';
 import uncommonSprite64 from '/assets/sprites/uncommon-64.png';
 import rareSprite64 from '/assets/sprites/rare-64.png';
@@ -47,10 +47,10 @@ const HomePage: React.FC = () => {
   const [currentRarityIndex, setCurrentRarityIndex] = useState(0);
   const { hasCritter, isLoading: isCheckingCritter } = useHasCritter(address);
   
-  // Mint functionality with proper typing
+  // Mint functionality
   const { writeContractAsync, isPending: isMinting } = useMintCritter();
-  
-  // Read the number of mints the user has already done
+
+  // Read contract data
   const { data: mintsUsed = 0n } = useReadContract({
     address: contractAddress,
     abi,
@@ -64,14 +64,13 @@ const HomePage: React.FC = () => {
     },
   });
 
-  // Read the maximum mints per wallet - this is a constant, so we can cache it longer
   const { data: maxMints = 4n } = useReadContract({
     address: contractAddress,
     abi,
     functionName: 'MAX_MINTS_PER_WALLET',
     query: {
-      staleTime: 3_600_000, // 1 hour
-      gcTime: 3_600_000, // 1 hour
+      staleTime: 3_600_000,
+      gcTime: 3_600_000,
       retry: false
     },
   });
@@ -95,11 +94,9 @@ const HomePage: React.FC = () => {
     if (!isConnected) return;
     
     try {
-      // Calculate total value needed for minting
-      const mintPrice = parseEther('1'); // 1 MON per mint
+      const mintPrice = parseEther('1');
       const totalValue = mintPrice * BigInt(mintCount);
       
-      // Call the mint function with the correct parameters
       await writeContractAsync({
         abi,
         functionName: 'mint',
@@ -107,7 +104,7 @@ const HomePage: React.FC = () => {
         value: totalValue
       });
     } catch (error) {
-      console.error('Minting failed:', error);
+      // Error handling will be managed by the UI toast notifications
     }
   };
   
@@ -609,7 +606,7 @@ const HomePage: React.FC = () => {
                         <div className="flex-shrink-0 w-6 h-6 mr-3 bg-purple-900 rounded-full flex items-center justify-center font-bold text-sm">3</div>
                         <div>
                           <h4 className="font-medium">Automatic Results</h4>
-                          <p className="text-sm text-gray-400">Pyth Entropy randomly determines winners</p>
+                          <p className="text-sm text-gray-400">Your NFT attributes and pyth entropy determines the winners</p>
                         </div>
                       </li>
                       <li className="flex">

@@ -4,7 +4,8 @@ import { ConnectButton } from './ConnectButton'
 import { useWallet } from './WalletProvider'
 import { motion } from 'framer-motion'
 import { 
-  Bars3Icon,  
+  Bars3Icon, 
+  HomeIcon, 
   TrophyIcon,
   FireIcon,
   UsersIcon,
@@ -108,24 +109,40 @@ export function Layout({ children }: { children: ReactNode }) {
       <footer className="py-8 px-4 text-center text-gray-400 text-sm border-t border-white/10">
         <div className="flex items-center justify-center gap-2 mb-4">
           <img src="/monad-logo.svg" alt="Monad" className="w-5 h-5" />
-          <p>Built on Monad Testnet • Powered by Pyth Network</p>
+          <p>Built on Monad Testnet • High Performance L1 Blockchain</p>
         </div>
         <div className="flex items-center justify-center space-x-6">
           <a
-            href="https://x.com/CritterClashFi"
+            href="https://x.com/0xElegant"
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-white transition-colors"
           >
-            Follow 𝕏 (CritterClashFi)
+            𝕏 Twitter
           </a>
           <a
-            href="https://t.me/clashofcritters/1"
+            href="https://t.me/Elegant_CF"
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-white transition-colors"
           >
             Telegram
+          </a>
+          <a
+            href="https://github.com/0xNana"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            GitHub
+          </a>
+          <a
+            href="https://discord.com/users/0xElegant"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            Discord
           </a>
         </div>
       </footer>

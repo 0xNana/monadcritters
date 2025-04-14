@@ -30,7 +30,7 @@ class ClashCardErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Clash Card Error:', error, errorInfo);
+    // Error reporting should be handled by your error tracking service
   }
 
   render() {
@@ -97,6 +97,7 @@ export default function ClashLobbyPage() {
   const navigate = useNavigate();
   const { address } = useAccount();
   const { isConnected } = useWallet();
+  const config = useConfig();
   const { showToast } = useToast();
   const { hasCritter, isLoading: isLoadingHasCritter } = useHasCritter(address);
   const { userCritters, isLoading: isLoadingCritters } = useUserCritters();
@@ -106,51 +107,47 @@ export default function ClashLobbyPage() {
   const [selectedCritterId, setSelectedCritterId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('active');
   const { getPlayerBoosts } = useCritterClashCore();
-  
-  // Check if wagmi is properly initialized
-  const [isWeb3Ready, setIsWeb3Ready] = useState(false);
-  const config = useConfig();
-  
-  useEffect(() => {
-    // Check if config exists and is properly initialized
-    if (config && config.chains && config.chains.length > 0) {
-      setIsWeb3Ready(true);
-    } else {
-      console.warn('Wagmi config not ready yet');
-    }
-  }, [config]);
 
-  // Only enable contract calls if web3 is ready
-  const shouldEnableContractCalls = isWeb3Ready && isConnected;
-
-  // Get active clashes for both sizes - we'll use direct contract calls for this legacy function
-  const { data: activeTwoPlayerClashId, refetch: refetchTwoPlayerClash } = useReadContract({
+  // Get active clashes for both sizes
+  const { data: activeTwoPlayerClashId, refetch: refetchTwoPlayerClash, isError: twoPlayerError } = useReadContract({
     address: CRITTER_CLASH_CORE_ADDRESS,
     abi: CRITTER_CLASH_CORE_ABI,
-    functionName: 'currentActiveClash' as any, // Use type assertion since this is a legacy function
+    functionName: 'currentActiveClash',
     args: [ClashSize.Two],
     query: {
-      enabled: shouldEnableContractCalls
+      enabled: true
     }
   });
 
-  const { data: activeFourPlayerClashId, refetch: refetchFourPlayerClash } = useReadContract({
+  const { data: activeFourPlayerClashId, refetch: refetchFourPlayerClash, isError: fourPlayerError } = useReadContract({
     address: CRITTER_CLASH_CORE_ADDRESS,
     abi: CRITTER_CLASH_CORE_ABI,
-    functionName: 'currentActiveClash' as any, // Use type assertion since this is a legacy function
+    functionName: 'currentActiveClash',
     args: [ClashSize.Four],
     query: {
-      enabled: shouldEnableContractCalls
+      enabled: true
     }
   });
 
-  // Debug logging for active clash IDs
+  // Debug active clash IDs with more detailed information
   useEffect(() => {
-    console.log('Active Clash IDs:', {
-      twoPlayer: activeTwoPlayerClashId?.toString(),
-      fourPlayer: activeFourPlayerClashId?.toString()
+    console.log('Current Active Clash Debug:', {
+      twoPlayer: {
+        id: activeTwoPlayerClashId ? activeTwoPlayerClashId.toString() : 'none',
+        error: twoPlayerError ? 'Error fetching' : null,
+        rawValue: activeTwoPlayerClashId,
+        type: activeTwoPlayerClashId ? typeof activeTwoPlayerClashId : 'undefined'
+      },
+      fourPlayer: {
+        id: activeFourPlayerClashId ? activeFourPlayerClashId.toString() : 'none',
+        error: fourPlayerError ? 'Error fetching' : null,
+        rawValue: activeFourPlayerClashId,
+        type: activeFourPlayerClashId ? typeof activeFourPlayerClashId : 'undefined'
+      },
+      contractAddress: CRITTER_CLASH_CORE_ADDRESS,
+      timestamp: new Date().toISOString()
     });
-  }, [activeTwoPlayerClashId, activeFourPlayerClashId]);
+  }, [activeTwoPlayerClashId, activeFourPlayerClashId, twoPlayerError, fourPlayerError]);
 
   // Get clash info for both sizes
   const { data: twoPlayerClashData, refetch: refetchTwoPlayerData } = useReadContract({
@@ -159,7 +156,7 @@ export default function ClashLobbyPage() {
     functionName: 'getClashInfo',
     args: [typeof activeTwoPlayerClashId === 'bigint' ? activeTwoPlayerClashId : BigInt(0)],
     query: {
-      enabled: shouldEnableContractCalls && !!activeTwoPlayerClashId && typeof activeTwoPlayerClashId === 'bigint' && activeTwoPlayerClashId > BigInt(0)
+      enabled: !!activeTwoPlayerClashId && typeof activeTwoPlayerClashId === 'bigint' && activeTwoPlayerClashId > BigInt(0)
     }
   });
 
@@ -169,69 +166,103 @@ export default function ClashLobbyPage() {
     functionName: 'getClashInfo',
     args: [typeof activeFourPlayerClashId === 'bigint' ? activeFourPlayerClashId : BigInt(0)],
     query: {
-      enabled: shouldEnableContractCalls && !!activeFourPlayerClashId && typeof activeFourPlayerClashId === 'bigint' && activeFourPlayerClashId > BigInt(0)
+      enabled: !!activeFourPlayerClashId && typeof activeFourPlayerClashId === 'bigint' && activeFourPlayerClashId > BigInt(0)
     }
   });
 
-  // Debug raw contract data before transformation
+  // Debug raw clash data
   useEffect(() => {
-    console.log('Raw contract data before transformation:', {
-      twoPlayerClashData,
-      fourPlayerClashData,
-      twoPlayerClashId: activeTwoPlayerClashId?.toString(),
-      fourPlayerClashId: activeFourPlayerClashId?.toString()
+    console.log('Raw Clash Data:', {
+      twoPlayer: {
+        id: activeTwoPlayerClashId?.toString(),
+        data: twoPlayerClashData
+      },
+      fourPlayer: {
+        id: activeFourPlayerClashId?.toString(),
+        data: fourPlayerClashData
+      }
     });
   }, [twoPlayerClashData, fourPlayerClashData, activeTwoPlayerClashId, activeFourPlayerClashId]);
 
-  // Transform clash data with better error handling
+  // Transform clash data with error handling and proper type checking
   const twoPlayerClashInfo = useMemo(() => {
-    if (!twoPlayerClashData || !activeTwoPlayerClashId || typeof activeTwoPlayerClashId !== 'bigint') return null;
+    if (!twoPlayerClashData || !activeTwoPlayerClashId) {
+      console.log('Two Player Clash: No data or ID available', {
+        hasData: !!twoPlayerClashData,
+        hasId: !!activeTwoPlayerClashId
+      });
+      return null;
+    }
+    
     try {
-      return transformClashData(activeTwoPlayerClashId, twoPlayerClashData as any);
+      const transformed = transformClashData(activeTwoPlayerClashId, twoPlayerClashData);
+      console.log('Transformed Two Player Clash:', {
+        id: activeTwoPlayerClashId ? activeTwoPlayerClashId.toString() : 'invalid',
+        state: transformed ? ClashState[transformed.state] : 'unknown',
+        playerCount: transformed?.players.length ?? 0,
+        maxPlayers: transformed?.maxPlayers ?? 0
+      });
+      return transformed;
     } catch (error) {
-      console.error('Error transforming two-player clash data:', error);
+      console.error('Error transforming two player clash:', {
+        error,
+        clashId: activeTwoPlayerClashId ? activeTwoPlayerClashId.toString() : 'invalid',
+        rawData: twoPlayerClashData
+      });
       return null;
     }
   }, [twoPlayerClashData, activeTwoPlayerClashId]);
 
   const fourPlayerClashInfo = useMemo(() => {
-    if (!fourPlayerClashData || !activeFourPlayerClashId || typeof activeFourPlayerClashId !== 'bigint') return null;
+    if (!fourPlayerClashData || !activeFourPlayerClashId) {
+      console.log('Four Player Clash: No data or ID available', {
+        hasData: !!fourPlayerClashData,
+        hasId: !!activeFourPlayerClashId
+      });
+      return null;
+    }
+    
     try {
-      return transformClashData(activeFourPlayerClashId, fourPlayerClashData as any);
+      const transformed = transformClashData(activeFourPlayerClashId, fourPlayerClashData);
+      console.log('Transformed Four Player Clash:', {
+        id: activeFourPlayerClashId ? activeFourPlayerClashId.toString() : 'invalid',
+        state: transformed ? ClashState[transformed.state] : 'unknown',
+        playerCount: transformed?.players.length ?? 0,
+        maxPlayers: transformed?.maxPlayers ?? 0
+      });
+      return transformed;
     } catch (error) {
-      console.error('Error transforming four-player clash data:', error);
+      console.error('Error transforming four player clash:', {
+        error,
+        clashId: activeFourPlayerClashId ? activeFourPlayerClashId.toString() : 'invalid',
+        rawData: fourPlayerClashData
+      });
       return null;
     }
   }, [fourPlayerClashData, activeFourPlayerClashId]);
 
-  // Debug logging for transformed clash info
-  useEffect(() => {
-    console.log('Transformed Clash Info:', {
-      twoPlayer: {
-        id: activeTwoPlayerClashId?.toString(),
-        info: twoPlayerClashInfo,
-        state: twoPlayerClashInfo?.state,
-        rawData: twoPlayerClashData
-      },
-      fourPlayer: {
-        id: activeFourPlayerClashId?.toString(),
-        info: fourPlayerClashInfo,
-        state: fourPlayerClashInfo?.state,
-        rawData: fourPlayerClashData
-      }
-    });
-  }, [twoPlayerClashInfo, fourPlayerClashInfo, activeTwoPlayerClashId, activeFourPlayerClashId, twoPlayerClashData, fourPlayerClashData]);
-
   // Filter clashes to only show those in ACCEPTING_PLAYERS state
-  const activeTwoPlayerClash = useMemo(() => 
-    twoPlayerClashInfo?.state === ClashState.ACCEPTING_PLAYERS ? twoPlayerClashInfo : null,
-    [twoPlayerClashInfo]
-  );
+  const activeTwoPlayerClash = useMemo(() => {
+    const filtered = twoPlayerClashInfo?.state === ClashState.ACCEPTING_PLAYERS ? twoPlayerClashInfo : null;
+    console.log('Active Two Player Clash (ACCEPTING_PLAYERS only):', {
+      id: twoPlayerClashInfo?.id.toString(),
+      state: twoPlayerClashInfo ? ClashState[twoPlayerClashInfo.state] : 'none',
+      isAccepting: filtered !== null,
+      playerCount: filtered?.players.length ?? 0
+    });
+    return filtered;
+  }, [twoPlayerClashInfo]);
 
-  const activeFourPlayerClash = useMemo(() => 
-    fourPlayerClashInfo?.state === ClashState.ACCEPTING_PLAYERS ? fourPlayerClashInfo : null,
-    [fourPlayerClashInfo]
-  );
+  const activeFourPlayerClash = useMemo(() => {
+    const filtered = fourPlayerClashInfo?.state === ClashState.ACCEPTING_PLAYERS ? fourPlayerClashInfo : null;
+    console.log('Active Four Player Clash (ACCEPTING_PLAYERS only):', {
+      id: fourPlayerClashInfo?.id.toString(),
+      state: fourPlayerClashInfo ? ClashState[fourPlayerClashInfo.state] : 'none',
+      isAccepting: filtered !== null,
+      playerCount: filtered?.players.length ?? 0
+    });
+    return filtered;
+  }, [fourPlayerClashInfo]);
 
   // Watch for clash state updates
   useWatchContractEvent({
@@ -243,7 +274,14 @@ export default function ClashLobbyPage() {
         const { args } = log as unknown as { args: [bigint, ClashSize, ClashState, `0x${string}`, bigint, bigint] };
         if (!args) return;
         
-        const [, clashSize, state] = args;
+        const [clashId, clashSize, state] = args;
+        
+        console.log('Clash Update Event:', {
+          clashId: clashId.toString(),
+          size: ClashSize[clashSize],
+          state: ClashState[state],
+          timestamp: new Date().toISOString()
+        });
         
         // Refetch data based on clash size
         if (clashSize === ClashSize.Two) {
@@ -259,10 +297,10 @@ export default function ClashLobbyPage() {
           showToast(`${clashSize === ClashSize.Two ? '2' : '4'} Player Clash is now open for players!`, 'info');
         }
       });
-    },
-    enabled: shouldEnableContractCalls
+    }
   });
 
+  // Debug join events
   useWatchContractEvent({
     address: CRITTER_CLASH_CORE_ADDRESS,
     abi: CRITTER_CLASH_CORE_ABI,
@@ -272,9 +310,17 @@ export default function ClashLobbyPage() {
         const { args } = log as unknown as { args: [`0x${string}`, bigint, bigint, `0x${string}`] };
         if (!args) return;
         
-        const [player] = args;
+        const [player, clashId, critterId] = args;
         
-        // Refetch data if the current user purchased boosts
+        console.log('Clash Join Event:', {
+          player,
+          clashId: clashId.toString(),
+          critterId: critterId.toString(),
+          isCurrentUser: player.toLowerCase() === address?.toLowerCase(),
+          timestamp: new Date().toISOString()
+        });
+        
+        // Refetch data if the current user joined
         if (player.toLowerCase() === address?.toLowerCase()) {
           refetchTwoPlayerClash();
           refetchTwoPlayerData();
@@ -282,41 +328,10 @@ export default function ClashLobbyPage() {
           refetchFourPlayerData();
         }
       });
-    },
-    enabled: shouldEnableContractCalls
+    }
   });
 
-  // Debug logging for player counts
-  useEffect(() => {
-    console.log('Two Player Clash Info:', {
-      id: twoPlayerClashInfo?.id.toString(),
-      players: twoPlayerClashInfo?.players,
-      playerCount: twoPlayerClashInfo?.playerCount,
-      rawData: twoPlayerClashData
-    });
-    console.log('Four Player Clash Info:', {
-      id: fourPlayerClashInfo?.id.toString(),
-      players: fourPlayerClashInfo?.players,
-      playerCount: fourPlayerClashInfo?.playerCount,
-      rawData: fourPlayerClashData
-    });
-  }, [twoPlayerClashInfo, fourPlayerClashInfo, twoPlayerClashData, fourPlayerClashData]);
-
-  // Add debug effect for modal state
-  useEffect(() => {
-    if (showJoinModal) {
-      console.log('Modal state:', {
-        showJoinModal,
-        selectedClashSize,
-        selectedCritterId,
-        hasTwoPlayerData: !!twoPlayerClashInfo && !!activeTwoPlayerClashId,
-        hasFourPlayerData: !!fourPlayerClashInfo && !!activeFourPlayerClashId
-      });
-    }
-  }, [showJoinModal, selectedClashSize, selectedCritterId, twoPlayerClashInfo, fourPlayerClashInfo, activeTwoPlayerClashId, activeFourPlayerClashId]);
-
-  // Update the loading state check in the UI
-  const isLoading = isLoadingHasCritter || isLoadingCritters || !isWeb3Ready;
+  const isLoading = isLoadingHasCritter || isLoadingCritters;
 
   // Get all possible clashes - ONLY ACCEPTING_PLAYERS state
   const allClashes = [activeTwoPlayerClash, activeFourPlayerClash].filter((clash): clash is ClashDetail => clash !== null);
@@ -324,22 +339,79 @@ export default function ClashLobbyPage() {
   // Get user's lobby clashes - This should already filter for ACCEPTING_PLAYERS state clashes only
   const userLobbyClashes = getUserLobbyClashes(allClashes, address);
 
-  // Show a loading state if web3 isn't ready
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Clash Lobby</h1>
-        <div className="bg-gray-800 rounded-xl p-10 text-center">
-          <div className="animate-pulse flex flex-col items-center">
-            <div className="h-10 w-10 bg-blue-500 rounded-full mb-4"></div>
-            <div className="h-4 w-40 bg-gray-700 rounded mb-2"></div>
-            <div className="h-3 w-32 bg-gray-700 rounded"></div>
-            <p className="mt-4 text-gray-400">Loading clash data...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleJoinTwoPlayerClash = () => {
+    if (!isConnected) {
+      showToast('Please connect your wallet', 'error');
+      return;
+    }
+    if (!hasCritter) {
+      showToast('You need a critter to join clashes', 'error');
+      return;
+    }
+    
+    // Special case: No active clash - create a new one automatically
+    if (!activeTwoPlayerClash || activeTwoPlayerClash.state !== ClashState.ACCEPTING_PLAYERS) {
+      showToast('No active clash available. Creating a new one...', 'info');
+      if (!selectedCritterId && userCritters.length > 0) {
+        setSelectedCritterId(Number(userCritters[0].id));
+      }
+      setSelectedClashSize(ClashSize.Two);
+      setShowJoinModal(true);
+      return;
+    }
+    
+    // Check if clash is full
+    if (activeTwoPlayerClash.playerCount >= 2) {
+      showToast('This clash is full. A new one will start soon!', 'info');
+      return;
+    }
+    
+    // Select first critter if none selected
+    if (!selectedCritterId && userCritters.length > 0) {
+      setSelectedCritterId(Number(userCritters[0].id));
+    }
+    
+    // Ready to join
+    setSelectedClashSize(ClashSize.Two);
+    setShowJoinModal(true);
+  };
+
+  const handleJoinFourPlayerClash = () => {
+    if (!isConnected) {
+      showToast('Please connect your wallet', 'error');
+      return;
+    }
+    if (!hasCritter) {
+      showToast('You need a critter to join clashes', 'error');
+      return;
+    }
+    
+    // Special case: No active clash - create a new one automatically
+    if (!activeFourPlayerClash || activeFourPlayerClash.state !== ClashState.ACCEPTING_PLAYERS) {
+      showToast('No active clash available. Creating a new one...', 'info');
+      if (!selectedCritterId && userCritters.length > 0) {
+        setSelectedCritterId(Number(userCritters[0].id));
+      }
+      setSelectedClashSize(ClashSize.Four);
+      setShowJoinModal(true);
+      return;
+    }
+    
+    // Check if clash is full
+    if (activeFourPlayerClash.playerCount >= 4) {
+      showToast('This clash is full. A new one will start soon!', 'info');
+      return;
+    }
+    
+    // Select first critter if none selected
+    if (!selectedCritterId && userCritters.length > 0) {
+      setSelectedCritterId(Number(userCritters[0].id));
+    }
+    
+    // Ready to join
+    setSelectedClashSize(ClashSize.Four);
+    setShowJoinModal(true);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -352,7 +424,7 @@ export default function ClashLobbyPage() {
           <div className="lg:col-span-2 bg-gray-800 rounded-xl p-6">
             <h2 className="text-2xl font-bold mb-6">Your Critters</h2>
             {userCritters.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {userCritters.map((critter) => (
                   <CritterCard
                     key={critter.id}
@@ -392,51 +464,7 @@ export default function ClashLobbyPage() {
               userAddress={address}
               isConnected={isConnected}
               hasCritter={hasCritter}
-              onJoinClick={() => {
-                console.log('Two Player Clash Join Attempt:', {
-                  isConnected,
-                  hasCritter,
-                  clashState: activeTwoPlayerClash?.state,
-                  playerCount: activeTwoPlayerClash?.playerCount,
-                  clashInfo: activeTwoPlayerClash,
-                  activeTwoPlayerClashId
-                });
-
-                if (!isConnected) {
-                  showToast('Please connect your wallet', 'error');
-                  return;
-                }
-                if (!hasCritter) {
-                  showToast('You need a critter to join clashes', 'error');
-                  return;
-                }
-                
-                // Special case: No active clash - create a new one automatically
-                if (!activeTwoPlayerClash || activeTwoPlayerClash.state !== ClashState.ACCEPTING_PLAYERS) {
-                  showToast('No active clash available. Creating a new one...', 'info');
-                  if (!selectedCritterId && userCritters.length > 0) {
-                    setSelectedCritterId(Number(userCritters[0].id));
-                  }
-                  setSelectedClashSize(ClashSize.Two);
-                  setShowJoinModal(true);
-                  return;
-                }
-                
-                // Check if clash is full
-                if (activeTwoPlayerClash.playerCount >= 2) {
-                  showToast('This clash is full. A new one will start soon!', 'info');
-                  return;
-                }
-                
-                // Select first critter if none selected
-                if (!selectedCritterId && userCritters.length > 0) {
-                  setSelectedCritterId(Number(userCritters[0].id));
-                }
-                
-                // Ready to join
-                setSelectedClashSize(ClashSize.Two);
-                setShowJoinModal(true);
-              }}
+              onJoinClick={handleJoinTwoPlayerClash}
             />
 
             {/* Four Player Clash Card */}
@@ -448,51 +476,7 @@ export default function ClashLobbyPage() {
               userAddress={address}
               isConnected={isConnected}
               hasCritter={hasCritter}
-              onJoinClick={() => {
-                console.log('Four Player Clash Join Attempt:', {
-                  isConnected,
-                  hasCritter,
-                  clashState: activeFourPlayerClash?.state,
-                  playerCount: activeFourPlayerClash?.playerCount,
-                  clashInfo: activeFourPlayerClash,
-                  activeFourPlayerClashId
-                });
-
-                if (!isConnected) {
-                  showToast('Please connect your wallet', 'error');
-                  return;
-                }
-                if (!hasCritter) {
-                  showToast('You need a critter to join clashes', 'error');
-                  return;
-                }
-                
-                // Special case: No active clash - create a new one automatically
-                if (!activeFourPlayerClash || activeFourPlayerClash.state !== ClashState.ACCEPTING_PLAYERS) {
-                  showToast('No active clash available. Creating a new one...', 'info');
-                  if (!selectedCritterId && userCritters.length > 0) {
-                    setSelectedCritterId(Number(userCritters[0].id));
-                  }
-                  setSelectedClashSize(ClashSize.Four);
-                  setShowJoinModal(true);
-                  return;
-                }
-                
-                // Check if clash is full
-                if (activeFourPlayerClash.playerCount >= 4) {
-                  showToast('This clash is full. A new one will start soon!', 'info');
-                  return;
-                }
-                
-                // Select first critter if none selected
-                if (!selectedCritterId && userCritters.length > 0) {
-                  setSelectedCritterId(Number(userCritters[0].id));
-                }
-                
-                // Ready to join
-                setSelectedClashSize(ClashSize.Four);
-                setShowJoinModal(true);
-              }}
+              onJoinClick={handleJoinFourPlayerClash}
             />
           </div>
         </div>

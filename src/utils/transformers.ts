@@ -1,11 +1,15 @@
 import { ClashDetail, ClashSize, ClashState } from '../contracts/CritterClashCore/types';
-import { parseEther } from 'ethers';
+import { utils } from 'ethers';
 
 // Entry fees for different clash sizes (in MON)
 const ENTRY_FEES = {
-  [ClashSize.None]: parseEther('0'),
-  [ClashSize.Two]: parseEther('0.1'),
-  [ClashSize.Four]: parseEther('0.1')
+  [ClashSize.Two]: utils.parseEther('0.1'),
+  [ClashSize.Four]: utils.parseEther('0.1')
+};
+
+// Default entry fee of 0 for any other case
+const getEntryFee = (size: ClashSize) => {
+  return ENTRY_FEES[size] || utils.parseEther('0');
 };
 
 // Helper to check if clash is fully completed
@@ -78,27 +82,31 @@ export const transformClashData = (
     // Convert clash size to maxPlayers
     const maxPlayers = clashSize === ClashSize.Four ? 4 : 2;
     
-    // Ensure arrays are initialized to prevent errors
+    // Ensure arrays are initialized and properly handle player count
     if (!players || !Array.isArray(players)) {
       players = [];
-      console.log('No player data received from contract');
+    }
+
+    // Calculate actual player count by counting non-zero addresses
+    const actualPlayerCount = players.filter(addr => 
+      addr && addr !== '0x0000000000000000000000000000000000000000'
+    ).length;
+
+    // For ACCEPTING_PLAYERS state (state 0), we need accurate player count
+    if (state === ClashState.ACCEPTING_PLAYERS && actualPlayerCount > maxPlayers) {
+      console.error('Invalid player count for ACCEPTING_PLAYERS state:', actualPlayerCount);
+      return null;
     }
     
     if (!critterIds || !Array.isArray(critterIds)) {
       critterIds = [];
-      console.log('No critter IDs received from contract');
     }
     
     if (!boosts || !Array.isArray(boosts)) {
       boosts = [];
-      console.log('No boost data received from contract');
     }
 
-    // Ensure playerCount is a number
-    const actualPlayerCount = typeof playerCount === 'bigint' ? Number(playerCount) : 
-                           (typeof playerCount === 'number' ? playerCount : 0);
-
-    // Create player objects directly from the contract data
+    // Create player objects only for valid players
     const playerObjects: {
       player: `0x${string}`;
       critterId: bigint;
@@ -106,30 +114,41 @@ export const transformClashData = (
       boost: bigint;
     }[] = [];
     
-    for (let i = 0; i < actualPlayerCount; i++) {
-      const playerAddress = i < players.length ? players[i] : `0x${'0'.repeat(40)}`;
-      const critterId = i < critterIds.length ? BigInt(critterIds[i].toString()) : BigInt(0);
-      const boost = i < boosts.length ? BigInt(boosts[i].toString()) : BigInt(0);
-      const score = i < scores?.length ? BigInt(scores[i].toString()) : BigInt(0);
-      
-      playerObjects.push({
-        player: playerAddress as `0x${string}`,
-        critterId,
-        score,
-        boost
-      });
+    for (let i = 0; i < players.length; i++) {
+      const playerAddress = players[i];
+      // Only include valid player addresses
+      if (playerAddress && playerAddress !== '0x0000000000000000000000000000000000000000') {
+        const critterId = i < critterIds.length ? BigInt(critterIds[i].toString()) : BigInt(0);
+        const boost = i < boosts.length ? BigInt(boosts[i].toString()) : BigInt(0);
+        const score = i < scores?.length ? BigInt(scores[i].toString()) : BigInt(0);
+        
+        playerObjects.push({
+          player: playerAddress as `0x${string}`,
+          critterId,
+          score,
+          boost
+        });
+      }
+    }
+
+    // For ACCEPTING_PLAYERS state, ensure player count matches actual players
+    if (state === ClashState.ACCEPTING_PLAYERS) {
+      if (playerObjects.length !== actualPlayerCount) {
+        console.error('Mismatch between player objects and actual count:', {
+          objectCount: playerObjects.length,
+          actualCount: actualPlayerCount
+        });
+      }
     }
 
     // Log the player objects for debugging
     console.log('Player objects created from contract data:', playerObjects);
 
     // Get entry fee based on clash size
-    const entryFee = maxPlayers === 2 
-      ? ENTRY_FEES[ClashSize.Two] 
-      : ENTRY_FEES[ClashSize.Four];
+    const entryFee = getEntryFee(clashSize);
     
     // Calculate total prize based on max players and entry fee
-    const totalPrize = entryFee * BigInt(maxPlayers);
+    const totalPrize = BigInt(entryFee.mul(maxPlayers).toString());
 
     // Debug logging for transformed data
     console.log('Transformed clash data:', {

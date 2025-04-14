@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatEther } from 'ethers';
+import { formatEther } from 'viem';
 import { useAccount } from 'wagmi';
 import { usePublicClient, useWalletClient } from 'wagmi';
 import { ClashDetail, ClashState, ClashSize } from '../contracts/CritterClashCore/types';
@@ -185,7 +185,7 @@ const ClashCard: React.FC<ClashCardProps> = ({ clash, onJoined }) => {
       return ClashSize.Four;
     }
     console.warn(`Invalid clash size: ${maxPlayers}, defaulting to None`);
-    return ClashSize.None;
+    return ClashSize.none;
   };
 
   return (

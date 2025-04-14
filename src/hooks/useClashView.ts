@@ -75,7 +75,6 @@ function initializeCache() {
         }
       }
     }
-    console.log(`Initialized clash cache with ${clashCache.size} items from localStorage`);
   } catch (error) {
     console.error('Error initializing cache from localStorage:', error);
   }
@@ -404,7 +403,6 @@ export function useClashView(batchSize: number = 10) {
     
     // Check if clash ID is known to be invalid
     if (isInvalidClashId(clashId)) {
-      console.log(`Skipping fetch for known invalid clash ID ${clashIdStr}`);
       return null;
     }
     
@@ -424,15 +422,6 @@ export function useClashView(batchSize: number = 10) {
       clashState = typeof cachedData.data[1] === 'number' ? cachedData.data[1] : Number(cachedData.data[1]);
     }
     
-    // Check if cache is valid based on clash state
-    if (cachedData) {
-      const isValid = isCacheValid(cachedData, clashState);
-      if (isValid) {
-        console.log(`Using cached data for clash ID ${clashIdStr}, state: ${clashState}`);
-        return cachedData.data;
-      }
-    }
-    
     // For completed clashes, we can also check localStorage as backup
     if (clashState === ClashState.COMPLETED_WITH_RESULTS) {
       try {
@@ -447,7 +436,6 @@ export function useClashView(batchSize: number = 10) {
             deserializedData.data && 
             Date.now() - deserializedData.timestamp < COMPLETED_CACHE_TTL
           ) {
-            console.log(`Using localStorage data for completed clash ID ${clashIdStr}`);
             // Refresh in-memory cache
             clashCache.set(cacheKey, { 
               data: deserializedData.data, 
@@ -485,7 +473,6 @@ export function useClashView(batchSize: number = 10) {
       
       // If we have cached data, return it even if it's expired
       if (cachedData) {
-        console.log(`Using expired cached data for clash ID ${clashIdStr} due to error`);
         return cachedData.data;
       }
       
@@ -543,7 +530,6 @@ export function useClashView(batchSize: number = 10) {
         );
         
         if (!isUserParticipant) {
-          console.log(`Skipping clash ${clashId}: user ${address} is not a participant in players list`);
           return null;
         }
       }
@@ -641,11 +627,9 @@ export function useClashView(batchSize: number = 10) {
       
       if (now - lastFetchTime < FULL_FETCH_INTERVAL && prioritizedCompleted.length > MAX_COMPLETED_TO_PROCESS) {
         // Recent fetch and we have many completed clashes, only process a subset
-        console.log('Recent fetch detected, limiting completed clashes to process');
         limitedCompleted = prioritizedCompleted.slice(0, MAX_COMPLETED_TO_PROCESS);
       } else {
         // No recent full fetch or few completed clashes, process all of them
-        console.log('Processing all completed clashes');
         localStorage.setItem(LAST_FETCH_KEY, now.toString());
       }
     } catch (error) {
@@ -679,19 +663,11 @@ export function useClashView(batchSize: number = 10) {
       const filteredClashingIds = filterInvalidClashIds(clashingIds);
       const filteredCompletedIds = filterInvalidClashIds(completedIds);
       
-      console.log('Fetching clash details for IDs (after filtering invalid):', {
-        accepting: filteredAcceptingIds.length,
-        clashing: filteredClashingIds.length,
-        completed: filteredCompletedIds.length
-      });
-      
       const pendingResults: { id: bigint; clash: ClashDetail }[] = [];
       const completed: { id: bigint; clash: ClashDetail; results: any[] }[] = [];
       
       // Prioritize the clash IDs
       const { prioritizedClashing, prioritizedCompleted } = prioritizeClashIds(filteredClashingIds, filteredCompletedIds);
-      
-      console.log(`Processing ${prioritizedClashing.length} clashing and ${prioritizedCompleted.length} completed clashes (prioritized/limited)`);
       
       // Helper function to process a batch of clash IDs
       const processBatch = async (clashIds: readonly bigint[], isCompleted: boolean, batchIndex: number) => {
@@ -700,14 +676,12 @@ export function useClashView(batchSize: number = 10) {
         
         for (let i = 0; i < clashIds.length; i += BATCH_SIZE) {
           const batchClashIds = clashIds.slice(i, i + BATCH_SIZE);
-          console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(clashIds.length / BATCH_SIZE)}: ${batchClashIds.map(id => id.toString()).join(', ')}`);
           
           // Process each clash in the batch sequentially to avoid overwhelming the RPC
           for (const clashId of batchClashIds) {
             try {
               // Skip if clash ID is known to be invalid
               if (isInvalidClashId(clashId)) {
-                console.log(`Skipping known invalid clash ID ${clashId} during batch processing`);
                 continue;
               }
               
@@ -730,8 +704,6 @@ export function useClashView(batchSize: number = 10) {
                     } else if (!isCompleted && clash.state === ClashState.COMPLETED_WITH_RESULTS) {
                       completed.push({ id: clashId, clash, results: clash.results });
                     }
-                    
-                    console.log(`Clash ${clashId} has state ${ClashState[clash.state]} but was in ${isCompleted ? 'completed' : 'clashing'} list`);
                   }
                 }
               }
@@ -743,7 +715,6 @@ export function useClashView(batchSize: number = 10) {
           
           // Add delay between batches with progressive backoff
           if (i + BATCH_SIZE < clashIds.length) {
-            console.log(`Waiting ${batchDelay}ms before processing next batch...`);
             await sleep(batchDelay);
           }
         }
@@ -762,11 +733,6 @@ export function useClashView(batchSize: number = 10) {
         }
         await processBatch(prioritizedCompleted, true, prioritizedClashing.length > 0 ? 1 : 0);
       }
-      
-      console.log('Processed clash results:', {
-        pendingResults: pendingResults.length,
-        completed: completed.length
-      });
       
       if (isMounted) {
         setGroupedClashes({ pendingResults, completed });
@@ -814,16 +780,6 @@ export function useClashView(batchSize: number = 10) {
         return;
       }
       
-      console.log('User clash IDs retrieved successfully:', {
-        userId: address,
-        acceptingPlayers: acceptingPlayersIds.length,
-        clashing: clashingIds.length,
-        completed: completedIds.length,
-        acceptingIds: acceptingPlayersIds.map(id => id.toString()),
-        clashingIds: clashingIds.map(id => id.toString()),
-        completedIds: completedIds.map(id => id.toString())
-      });
-      
       // Only fetch details if there are clash IDs to process
       // Prioritize active clashes (CLASHING state)
       const hasClashesToProcess = clashingIds.length > 0 || completedIds.length > 0 || acceptingPlayersIds.length > 0;
@@ -867,18 +823,11 @@ export function useClashView(batchSize: number = 10) {
   useEffect(() => {
     const cleanupTimer = setInterval(() => {
       const now = Date.now();
-      let cleared = 0;
-      
       invalidClashIds.forEach((record, idStr) => {
         if (now - record.timestamp > INVALID_ID_TTL) {
           invalidClashIds.delete(idStr);
-          cleared++;
         }
       });
-      
-      if (cleared > 0) {
-        console.log(`Cleared ${cleared} expired invalid clash IDs from memory`);
-      }
     }, 30 * 60 * 1000); // Run every 30 minutes
     
     return () => clearInterval(cleanupTimer);
@@ -887,8 +836,6 @@ export function useClashView(batchSize: number = 10) {
   // Refetch function to manually trigger a refresh
   const refetch = useCallback(() => {
     if (userClashIdsQuery.refetch && isMounted) {
-      console.log('Manually refetching clash data for user:', address);
-      
       // Clear request error counts on manual refresh
       setRequestErrors({});
       
@@ -909,8 +856,6 @@ export function useClashView(batchSize: number = 10) {
             clashCache.delete(key);
           }
         });
-        
-        console.log('Cleared non-completed clashes from in-memory cache');
       } catch (error) {
         console.error('Error clearing cache selectively:', error);
       }

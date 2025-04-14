@@ -2,12 +2,12 @@
 
 import { ReactNode, createContext, useContext, useEffect, useState } from 'react'
 import { getAccount, watchAccount, disconnect as wagmiDisconnect } from '@wagmi/core'
-import { getConfig } from '../utils/config'
 import { monadTestnet } from '../utils/chains'
 import { createAppKit, useAppKit, useAppKitState } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { http } from 'viem'
 import React from 'react'
 
 // Get project ID from environment variables
@@ -17,16 +17,30 @@ if (!REOWN_PROJECT_ID) {
   console.warn('Reown project ID not found in environment variables, using fallback')
 }
 
-// Create QueryClient instance
-const queryClient = new QueryClient()
-
-// Create Wagmi adapter
-const wagmiAdapter = new WagmiAdapter({
-  networks: [monadTestnet],
-  projectId: REOWN_PROJECT_ID
+// Create QueryClient instance with proper configuration
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      staleTime: 5000,
+    },
+  },
 })
 
-// Initialize AppKit
+// Create and initialize Wagmi adapter with transport
+export const wagmiAdapter = new WagmiAdapter({
+  networks: [monadTestnet],
+  projectId: REOWN_PROJECT_ID,
+  transports: {
+    [monadTestnet.id]: http(monadTestnet.rpcUrls.default.http[0])
+  }
+})
+
+// Export the wagmi config
+export const wagmiConfig = wagmiAdapter.wagmiConfig
+
+// Initialize AppKit after transport is configured
 const appKit = createAppKit({
   adapters: [wagmiAdapter],
   networks: [monadTestnet],
@@ -328,24 +342,13 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
     forceConnectionCheck();
   }, [appKitState, isConnected]);
 
-  // Check if wallet is already connected on mount
+  // Update the account checking code to avoid variable redeclaration
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        // Check Wagmi connection
-        const account = getAccount(getConfig());
-        
-        // If Wagmi shows connected, use that
-        if (account.isConnected && account.address) {
-          setAddress(account.address);
-          setIsConnected(true);
-          return;
-        }
-        
-        // Force a refresh of the connection state
-        const refreshedAccount = getAccount(getConfig());
-        if (refreshedAccount.isConnected && refreshedAccount.address) {
-          setAddress(refreshedAccount.address);
+        const wagmiAccount = getAccount(wagmiConfig);
+        if (wagmiAccount.isConnected && wagmiAccount.address) {
+          setAddress(wagmiAccount.address);
           setIsConnected(true);
         }
       } catch (error) {
@@ -357,8 +360,8 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Watch for account changes from Wagmi
-    const unwatch = watchAccount(getConfig(), {
+    // Watch for account changes using the adapter's config
+    const unwatch = watchAccount(wagmiConfig, {
       onChange(account) {
         if (account.address) {
           setAddress(account.address)
@@ -447,7 +450,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         attempts++;
         
         // Check Wagmi account first
-        const account = getAccount(getConfig())
+        const account = getAccount(wagmiConfig)
         if (account.address) {
           setAddress(account.address)
           setIsConnected(account.isConnected)
@@ -512,7 +515,7 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
   const disconnect = async () => {
     try {
       setIsConnecting(true)
-      await wagmiDisconnect(getConfig())
+      await wagmiDisconnect(wagmiConfig)
       await appKit.close()
       setAddress(undefined)
       setIsConnected(false)
@@ -547,8 +550,11 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
+  // Ensure the config is properly initialized
+  const config = wagmiAdapter.wagmiConfig
+
   return (
-    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+    <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <WalletProviderInner>{children}</WalletProviderInner>
       </QueryClientProvider>

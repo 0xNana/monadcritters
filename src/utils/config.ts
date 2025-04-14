@@ -1,6 +1,8 @@
-import { createConfig, http, fallback } from '@wagmi/core'
+import { createConfig, http } from '@wagmi/core'
 import { monadTestnet } from './chains'
 import { useChains } from 'wagmi'
+import { createTransport, type HttpTransport } from 'viem'
+import { type Chain } from 'viem/chains'
 // Contract addresses from environment variables
 const MONAD_CRITTER_ADDRESS = process.env.VITE_MONAD_CRITTER_ADDRESS || import.meta.env?.VITE_MONAD_CRITTER_ADDRESS
 if (!MONAD_CRITTER_ADDRESS) {
@@ -424,85 +426,50 @@ const createRateLimitedTransport = (url: string, config: any) => {
 };
 
 // Create purpose-specific transports
-const createEventTransport = () => fallback([
-  createRateLimitedTransport(RPC_CONFIG.PRIMARY.EVENTS, {
-    timeout: 15_000,
-    retryCount: 3,
-    retryDelay: 1000,
-    onError: (error) => {
-      console.warn('Event transport error:', error);
-      // Don't throw to allow fallback to work
-      return undefined;
+const createEventTransport = () => http(MONAD_ALCHEMY_RPC1, {
+  timeout: 15_000,
+  batch: {
+    batchSize: 3,
+    wait: 100
+  },
+  fetchOptions: {
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
     }
-  }),
-  createRateLimitedTransport(RPC_CONFIG.BACKUP.EVENTS, {
-    timeout: 20_000,
-    retryCount: 2,
-    retryDelay: 1500,
-    onError: (error) => {
-      console.warn('Backup event transport error:', error);
-      return undefined;
-    }
-  })
-], { rank: true });
+  },
+});
 
-const createWriteTransport = () => fallback([
-  createRateLimitedTransport(RPC_CONFIG.PRIMARY.WRITE, {
-    timeout: 12_000,
-    retryCount: 2,
-    retryDelay: 800,
-    onError: (error) => {
-      console.warn('Write transport error:', error);
-      return undefined;
+const createWriteTransport = () => http(MONAD_ALCHEMY_RPC1, {
+  timeout: 15_000,
+  batch: {
+    batchSize: 1,
+    wait: 0
+  },
+  fetchOptions: {
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
     }
-  }),
-  createRateLimitedTransport(RPC_CONFIG.BACKUP.WRITE, {
-    timeout: 12_000,
-    retryCount: 2,
-    retryDelay: 800,
-    onError: (error) => {
-      console.warn('Backup write transport error:', error);
-      return undefined;
-    }
-  }),
-  createRateLimitedTransport(RPC_CONFIG.FALLBACK.WRITE, {
-    timeout: 15_000,
-    retryCount: 1,
-    retryDelay: 1000,
-    onError: (error) => {
-      console.warn('Fallback write transport error:', error);
-      return undefined;
-    }
-  })
-], { rank: true });
+  },
+});
 
-const createReadTransport = () => fallback([
-  createRateLimitedTransport(RPC_CONFIG.PRIMARY.READ, {
-    timeout: 8_000,
-    retryCount: 2,
-    retryDelay: 500,
-    onError: (error) => {
-      console.warn('Read transport error:', error);
-      return undefined;
+const createReadTransport = () => http(MONAD_ALCHEMY_RPC1, {
+  timeout: 10_000,
+  batch: {
+    batchSize: 5,
+    wait: 50
+  },
+  fetchOptions: {
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
     }
-  }),
-  createRateLimitedTransport(RPC_CONFIG.BACKUP.READ, {
-    timeout: 12_000,
-    retryCount: 2,
-    retryDelay: 1000,
-    onError: (error) => {
-      console.warn('Backup read transport error:', error);
-      return undefined;
-    }
-  })
-], { rank: true });
+  },
+});
 
-// Update monadTransport to use purpose-specific configuration
-const monadTransport = fallback([
-  createEventTransport(),
-  createWriteTransport(),
-  createReadTransport()
-], { rank: true });
+// Update monadTransport to use simple http instead of fallback
+const monadTransport = createReadTransport();
 
 // Contract configuration types
 type NetworkContracts = {
@@ -588,48 +555,43 @@ export const QUERY_CONFIG = {
   }
 } as const;
 
-// Create custom Monad chain config with proper fallbacks
-const monadWithPrimary = {
+// Create the chain configuration
+export const monadWithTransport = {
   ...monadTestnet,
   rpcUrls: {
-    ...monadTestnet.rpcUrls,
     default: {
-      http: [MONAD_ALCHEMY_RPC1],
+      http: [MONAD_PRIMARY_RPC],
     },
     public: {
-      http: [MONAD_ALCHEMY_RPC1, MONAD_ALCHEMY_RPC2, MONAD_BACKUP_RPC, MONAD_PRIMARY_RPC],
+      http: [MONAD_PRIMARY_RPC, MONAD_ALCHEMY_RPC1, MONAD_ALCHEMY_RPC2, MONAD_BACKUP_RPC].filter(Boolean),
     },
   },
-};
+} as const
 
-// Check if we're in browser context to avoid server-side rendering issues
-const isBrowserContext = typeof window !== 'undefined';
+// Create the transport configuration
+const createChainTransport = (chain: Chain) => {
+  const rpcUrl = chain.rpcUrls.default.http[0]
+  return http(rpcUrl)
+}
 
-// Safely create the Wagmi config
-export const config = isBrowserContext ? createConfig({
-  chains: [monadWithPrimary],
+// Create the Wagmi config
+export const config = createConfig({
+  chains: [monadWithTransport],
   transports: {
-    [monadWithPrimary.id]: monadTransport,
+    [monadWithTransport.id]: createChainTransport(monadWithTransport),
   },
-}) : null; // Return null for server context
+})
 
-// Export a safe getter function to avoid "undefined" errors
-export const getConfig = () => {
-  return config || createConfig({
-    chains: [monadWithPrimary],
-    transports: {
-      [monadWithPrimary.id]: monadTransport,
-    },
-  });
-};
+// Export a safe getter function
+export const getConfig = () => config
 
 // Game constants
 export const gameConfig = {
-  mintPrice: 0.1,
+  mintPrice: 1,
   maxMintsPerWallet: 4,
   maxBoostsPerClash: 2,
-  boostPricePercent: 10, // 10% of clash entry fee
-  clashDuration: 60, // seconds
+  boostPricePercent: 10,
+  clashDuration: 60,
   boostMultiplier: 100
 } as const;
 
@@ -702,7 +664,7 @@ export const RPC_ENDPOINTS = {
 } as const;
 
 // Export chain config
-export { monadWithPrimary as monadTestnet };
+export { monadWithTransport as monadTestnet };
 
 if (process.env.NODE_ENV !== 'production') {
   console.debug('Contract Configuration:', {
