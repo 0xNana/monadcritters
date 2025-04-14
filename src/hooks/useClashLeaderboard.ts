@@ -142,10 +142,18 @@ export const useClashLeaderboard = () => {
     return () => clearInterval(interval);
   }, [updateLeaderboard]);
 
+  // Calculate user rank and return undefined instead of 0 if not found
+  const userRank = useMemo(() => {
+    if (!address) return undefined;
+    
+    const index = leaderboard.findIndex(entry => entry.address.toLowerCase() === address.toLowerCase());
+    return index !== -1 ? index + 1 : undefined;
+  }, [address, leaderboard]);
+
   return {
     leaderboard,
     isLoading,
-    userRank: address ? leaderboard.findIndex(entry => entry.address.toLowerCase() === address.toLowerCase()) + 1 : 0,
+    userRank,
     refetch: updateLeaderboard
   };
 };

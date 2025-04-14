@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from './WalletProvider';
 import { useBalance } from 'wagmi';
 import { Toast } from './Toast';
-import { useAppKitState } from '@reown/appkit/react';
+import { useDisconnect, useAppKitState } from '@reown/appkit/react';
 
 interface WalletDropdownProps {
   isOpen: boolean;
@@ -13,7 +13,8 @@ interface WalletDropdownProps {
 }
 
 export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletDropdownProps) {
-  const { disconnect } = useWallet();
+  const { disconnect: walletProviderDisconnect } = useWallet();
+  const appKitDisconnect = useDisconnect();
   const { data: balance } = useBalance({
     address: address as `0x${string}`,
   });
@@ -51,7 +52,12 @@ export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletD
 
   const handleDisconnect = async () => {
     try {
-      await disconnect();
+      // First try AppKit disconnect
+      await appKitDisconnect.disconnect();
+      
+      // Then use our WalletProvider disconnect as fallback
+      await walletProviderDisconnect();
+      
       onClose();
       // Force a UI update after disconnect
       setTimeout(() => {

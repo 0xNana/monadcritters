@@ -142,14 +142,6 @@ export default function ClashViewPage() {
         {type === 'pending' ? 'No Pending Results' : 'No Completed Clashes'}
       </h3>
       <p className="text-gray-500 max-w-sm">{message}</p>
-      {type === 'pending' && (
-        <button
-          onClick={() => window.location.href = '/clash'}
-          className="mt-4 px-6 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg transition-all"
-        >
-          Join a Clash
-        </button>
-      )}
     </div>
   );
 

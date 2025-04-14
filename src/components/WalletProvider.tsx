@@ -3,7 +3,7 @@
 import { ReactNode, createContext, useContext, useEffect, useState } from 'react'
 import { getAccount, watchAccount, disconnect as wagmiDisconnect, getConnections } from '@wagmi/core'
 import { monadTestnet } from '../utils/chains'
-import { createAppKit, useAppKit, useAppKitState } from '@reown/appkit/react'
+import { createAppKit, useDisconnect, useAppKitState } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -519,7 +519,14 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
       // Get current connections
       const connections = getConnections(wagmiConfig)
       
-      // Disconnect using the standard method - it now handles multiple connectors in v2
+      // Try to disconnect using AppKit first
+      try {
+        await appKit.close()
+      } catch (appKitError) {
+        console.warn('AppKit close error:', appKitError)
+      }
+
+      // Then try wagmi disconnect
       try {
         await wagmiDisconnect(wagmiConfig)
       } catch (disconnectError) {
@@ -529,16 +536,16 @@ function WalletProviderInner({ children }: { children: ReactNode }) {
         if (connections?.length > 0) {
           for (const connection of connections) {
             try {
-              await wagmiDisconnect(wagmiConfig, { connector: connection.connector })
+              // Check if connector has disconnect method before calling
+              if (typeof connection.connector?.disconnect === 'function') {
+                await connection.connector.disconnect()
+              }
             } catch (error) {
               console.warn(`Failed to disconnect connector: ${error}`)
             }
           }
         }
       }
-
-      // Close AppKit regardless of the disconnect method result
-      await appKit.close()
       
       // Update local state
       setAddress(undefined)
