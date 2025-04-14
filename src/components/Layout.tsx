@@ -113,7 +113,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
         <div className="flex items-center justify-center space-x-6">
           <a
-            href="https://x.com/0xElegant"
+            href="https://x.com/CritterClashFi"
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-white transition-colors"
@@ -121,28 +121,12 @@ export function Layout({ children }: { children: ReactNode }) {
             𝕏 Twitter
           </a>
           <a
-            href="https://t.me/Elegant_CF"
+            href="https://t.me/clashofcritters"
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-white transition-colors"
           >
             Telegram
-          </a>
-          <a
-            href="https://github.com/0xNana"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            GitHub
-          </a>
-          <a
-            href="https://discord.com/users/0xElegant"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            Discord
           </a>
         </div>
       </footer>

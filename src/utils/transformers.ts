@@ -66,9 +66,10 @@ export const transformClashData = (
     }
 
     // Calculate actual player count by counting non-zero addresses
-    const actualPlayerCount = players.filter(addr => 
+    const validPlayers = players.filter(addr => 
       addr && addr !== '0x0000000000000000000000000000000000000000'
-    ).length;
+    );
+    const actualPlayerCount = validPlayers.length;
 
     // For ACCEPTING_PLAYERS state (state 0), we need accurate player count
     if (state === ClashState.ACCEPTING_PLAYERS && actualPlayerCount > maxPlayers) {
@@ -108,13 +109,6 @@ export const transformClashData = (
       }
     }
 
-    // For ACCEPTING_PLAYERS state, ensure player count matches actual players
-    if (state === ClashState.ACCEPTING_PLAYERS) {
-      if (playerObjects.length !== actualPlayerCount) {
-        // Silent error - no need to log here
-      }
-    }
-
     // Get entry fee based on clash size
     const entryFee = getEntryFee(clashSize);
     
@@ -124,9 +118,12 @@ export const transformClashData = (
     // Determine clash status and hasEnded
     const isCompleted = state === ClashState.COMPLETED_WITH_RESULTS;
     const currentTime = BigInt(Math.floor(Date.now() / 1000));
-    const hasEnded = isCompleted || (startTime + BigInt(60) < currentTime); // 60 second clash duration
+    const hasEnded = isCompleted || (startTime + BigInt(60) < currentTime);
     
-    return {
+    // Ensure status is typed correctly
+    const status: "Completed" | "Active" = isCompleted ? "Completed" : "Active";
+    
+    const result: ClashDetail = {
       id: clashId,
       clashSize: clashSize as ClashSize,
       state: state as ClashState,
@@ -136,10 +133,12 @@ export const transformClashData = (
       results: results && Array.isArray(results) ? [...results] : [], 
       startTime,
       totalPrize,
-      status: isCompleted ? 'Completed' : 'Active',
+      status,
       hasEnded,
       isProcessed: isProcessed || isCompleted
     };
+    
+    return result;
   } catch (error) {
     return null;
   }

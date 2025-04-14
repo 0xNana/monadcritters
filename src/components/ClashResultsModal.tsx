@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatAddress } from '../utils/format';
 import { ClashDetail, ClashState } from '../contracts/CritterClashCore/types';
 import { useClashResults } from '../hooks/useClashResults';
+import SocialShareButton from './SocialShareButton';
 
 interface ClashResult {
   player: `0x${string}`;
@@ -125,6 +126,14 @@ const ClashResultsModal: React.FC<ClashResultsModalProps> = ({ clash, onClose, u
     }
   }, [clashInfo, clash, userAddress, isLoadingResults]);
 
+  // Get user's position in the clash
+  const userResult = useMemo(() => {
+    return formattedResults.find(result => result.isUser);
+  }, [formattedResults]);
+
+  // Check if user participated in this clash
+  const userParticipated = !!userResult;
+
   return (
     <AnimatePresence>
       <motion.div
@@ -231,8 +240,15 @@ const ClashResultsModal: React.FC<ClashResultsModalProps> = ({ clash, onClose, u
             )}
           </div>
 
-          {/* Bottom close button */}
-          <div className="mt-6 flex justify-center">
+          {/* Bottom action buttons */}
+          <div className="mt-6 flex justify-center gap-4">
+            {userParticipated && (
+              <SocialShareButton 
+                type="clash"
+                position={userResult?.position || 0}
+                reward={userResult?.reward && userResult.reward > BigInt(0) ? userResult.formattedReward : undefined}
+              />
+            )}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}

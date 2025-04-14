@@ -799,15 +799,15 @@ const HomePage: React.FC = () => {
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-white transition-colors"
               >
-                Follow 𝕏 (CritterClashFi)
+                Follow 𝕏 
               </a>
               <a
-                href="https://t.me/clashofcritters/1"
+                href="https://t.me/clashofcritters/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-white transition-colors"
               >
-                Telegram
+                Join Telegram
               </a>
             </div>
           </footer>

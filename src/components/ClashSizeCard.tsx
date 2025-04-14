@@ -26,13 +26,9 @@ const ClashSizeCard: React.FC<ClashSizeCardProps> = ({
   isConnected,
   hasCritter,
 }) => {
-  const {
-    playerCount,
-    maxPlayers: actualMaxPlayers,
-    isUserParticipating,
-    state
-  } = useClashStatus(clashInfo, userAddress);
-
+  // Get the current status from useClashStatus hook
+  const status = useClashStatus(clashInfo, userAddress);
+  
   // Get entry fee based on clash size
   const entryFee = maxPlayers === 2 ? '1' : '2'; // 1 MON for 2-player, 2 MON for 4-player
   
@@ -40,7 +36,12 @@ const ClashSizeCard: React.FC<ClashSizeCardProps> = ({
   const prizePool = maxPlayers === 2 ? '2' : '8'; // 2 MON for 2-player, 8 MON for 4-player
   
   // We only care about ACCEPTING_PLAYERS state (state === 0)
-  const isAcceptingPlayers = state === ClashState.ACCEPTING_PLAYERS;
+  const isAcceptingPlayers = status.state === ClashState.ACCEPTING_PLAYERS;
+
+  // Use the playerCount and maxPlayers directly from the status
+  const playerCount = status.playerCount;
+  const actualMaxPlayers = status.maxPlayers || maxPlayers;
+  const isUserParticipating = status.isUserParticipating;
 
   return (
     <motion.div
@@ -63,7 +64,7 @@ const ClashSizeCard: React.FC<ClashSizeCardProps> = ({
             <div className="text-right">
               <div className="text-sm text-gray-400">Players</div>
               <div className="text-lg font-bold text-purple-300">
-                {playerCount}/{actualMaxPlayers || maxPlayers}
+                {playerCount}/{actualMaxPlayers}
               </div>
             </div>
           </div>

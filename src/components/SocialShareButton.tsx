@@ -26,24 +26,48 @@ const SocialShareButton: React.FC<SocialShareButtonProps> = ({
     
     let shareText = '';
     
+    // More exciting messages based on position
     if (isWinner) {
-      shareText = `🏆 I just won a ${gameType} in Monad Critters`;
       if (reward) {
-        shareText += ` and earned ${reward} MON! 💰`;
+        // Random winner messages with reward
+        const winnerMessages = [
+          `🏆 BOOM! Just won ${reward} MON in Clash of Critters, the FIRST NFT betting arena on Monad! 💰`,
+          `🚀 Just crushed a ${gameType} and won ${reward} MON in Clash of Critters - first ever NFT betting arena on Monad! 💸`,
+          `💎 ${reward} MON winner! Just dominated in Clash of Critters - Monad's first NFT betting arena! Who's next?`
+        ];
+        shareText = winnerMessages[Math.floor(Math.random() * winnerMessages.length)];
       } else {
-        shareText += `! 🔥`;
+        // Winner but no specific reward amount
+        const generalWinMessages = [
+          `🏆 Just claimed victory in Clash of Critters, the FIRST NFT betting arena on Monad! Who dares challenge me next? 🔥`,
+          `🚀 Victorious in Clash of Critters - pioneering NFT betting on Monad! My critters are unstoppable!`,
+          `💯 Winning feels good! Just took first place in Clash of Critters, Monad's premiere NFT betting arena!`
+        ];
+        shareText = generalWinMessages[Math.floor(Math.random() * generalWinMessages.length)];
       }
     } else if (position === 2) {
-      shareText = `🥈 Runner-up in a ${gameType} in Monad Critters!`;
+      // Second place messages
+      const runnerUpMessages = [
+        `🥈 So close! Just got runner-up in Clash of Critters, the first NFT betting arena on Monad!`,
+        `🔥 Second place in Clash of Critters on Monad! Almost had it - coming for that top spot next time!`,
+        `👀 Just missed the top prize in Clash of Critters, the hottest NFT betting arena on Monad! Watch me next round!`
+      ];
+      shareText = runnerUpMessages[Math.floor(Math.random() * runnerUpMessages.length)];
     } else {
-      shareText = `Just played a ${gameType} in Monad Critters! Join me for the next one.`;
+      // Participated but didn't place in top 2
+      const participationMessages = [
+        `Just battled in Clash of Critters, the FIRST NFT betting arena on Monad! Getting stronger with every match.`,
+        `My Critters are warming up in Monad's premiere NFT betting arena! Watch my comeback in the next clash!`,
+        `The competition is fierce in Clash of Critters, Monad's revolutionary NFT betting platform! I'm coming back stronger!`
+      ];
+      shareText = participationMessages[Math.floor(Math.random() * participationMessages.length)];
     }
     
-    // Add referral link if available
+    // Add call to action and referral link
     if (referralCode) {
-      shareText += ` Join me: ${baseUrl}?ref=${referralCode}`;
+      shareText += ` Join me and start winning: ${baseUrl}?ref=${referralCode}`;
     } else {
-      shareText += ` Play now: ${baseUrl}`;
+      shareText += ` Join the action: ${baseUrl}`;
     }
     
     return encodeURIComponent(shareText);
