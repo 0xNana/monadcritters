@@ -5,6 +5,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useClashLeaderboard } from '../hooks/useClashLeaderboard';
 import { formatAddress, formatWeiToMON } from '../utils/formatters';
 
+// Define the LeaderboardEntry type
+type LeaderboardEntry = {
+  address: string;
+  score: bigint;
+  rewards: bigint;
+  wins: bigint;
+  clashCount: bigint;
+  lastClashTimestamp: bigint;
+};
+
 const TIME_RANGE_OPTIONS = [
   { value: 'all', label: 'All Time' },
   { value: 'month', label: 'This Month' },
@@ -13,7 +23,10 @@ const TIME_RANGE_OPTIONS = [
 ] as const;
 
 const SORT_OPTIONS = [
+  { value: 'rewards', label: 'Rewards' },
   { value: 'score', label: 'Score' },
+  { value: 'clashes', label: 'Clashes' },
+  { value: 'winrate', label: 'Win Rate' }
 ] as const;
 
 const ClashLeaderboardPage = () => {
@@ -21,24 +34,55 @@ const ClashLeaderboardPage = () => {
   const { address } = useAccount();
   const [searchAddress, setSearchAddress] = useState('');
   const [timeRange, setTimeRange] = useState<'all' | 'month' | 'week' | 'day'>('all');
-  const [sortBy, setSortBy] = useState<'score'>('score');
+  const [sortBy, setSortBy] = useState<'rewards' | 'score' | 'clashes' | 'winrate'>('rewards');
 
   const { leaderboard, userRank, isLoading, refetch } = useClashLeaderboard();
 
-  // Filter leaderboard based on search
-  const filteredLeaderboard = React.useMemo(() => {
-    // If no search is active, show all entries
-    if (!searchAddress) {
-      return leaderboard;
+  // Filter and sort leaderboard
+  const sortedAndFilteredLeaderboard = React.useMemo(() => {
+    let filtered = leaderboard;
+
+    // Apply time range filter - For now, we'll filter based on activity (clashCount)
+    // since we don't have timestamp data from the contract
+    filtered = filtered.filter(entry => {
+      switch (timeRange) {
+        case 'day':
+          return Number(entry.clashCount) > 0; // Active today
+        case 'week':
+          return Number(entry.clashCount) >= 5; // At least 5 clashes
+        case 'month':
+          return Number(entry.clashCount) >= 20; // At least 20 clashes
+        case 'all':
+        default:
+          return true;
+      }
+    });
+
+    // Apply search filter if exists
+    if (searchAddress) {
+      filtered = filtered.filter(entry => 
+        entry.address.toLowerCase().includes(searchAddress.toLowerCase())
+      );
     }
 
-    // Only filter if there's an active search
-    const filtered = leaderboard.filter(entry => 
-      entry.address.toLowerCase().includes(searchAddress.toLowerCase())
-    );
-    
-    return filtered;
-  }, [leaderboard, searchAddress]);
+    // Apply sorting
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case 'rewards':
+          return Number(b.rewards - a.rewards);
+        case 'score':
+          return Number(b.score - a.score);
+        case 'clashes':
+          return Number(b.clashCount - a.clashCount);
+        case 'winrate':
+          const aWinRate = Number(a.wins) / Number(a.clashCount) || 0;
+          const bWinRate = Number(b.wins) / Number(b.clashCount) || 0;
+          return bWinRate - aWinRate;
+        default:
+          return 0;
+      }
+    });
+  }, [leaderboard, searchAddress, sortBy, timeRange]);
 
   // Safe rendering helpers
   const formatScore = (score: bigint | undefined) => {
@@ -89,7 +133,7 @@ const ClashLeaderboardPage = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4"
+            className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4"
           >
             {/* Search */}
             <input
@@ -107,6 +151,17 @@ const ClashLeaderboardPage = () => {
               className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-gray-300 focus:outline-none focus:border-purple-500/50"
             >
               {TIME_RANGE_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+
+            {/* Sort Filter */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-gray-300 focus:outline-none focus:border-purple-500/50"
+            >
+              {SORT_OPTIONS.map(option => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
@@ -174,14 +229,14 @@ const ClashLeaderboardPage = () => {
                         </div>
                       </td>
                     </tr>
-                  ) : filteredLeaderboard.length === 0 ? (
+                  ) : sortedAndFilteredLeaderboard.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="text-center py-8 text-gray-400">
                         No entries found
                       </td>
                     </tr>
                   ) : (
-                    filteredLeaderboard.map((entry, index) => (
+                    sortedAndFilteredLeaderboard.map((entry, index) => (
                       <tr 
                         key={entry.address}
                         className={`border-t border-gray-700 ${entry.address === address ? 'bg-purple-900/20' : 'hover:bg-gray-700/50'}`}

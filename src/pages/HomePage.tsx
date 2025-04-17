@@ -8,6 +8,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { parseEther } from 'viem';
 import { abi } from '../contracts/MonadCritter/abi';
 import { useContractAddress } from '../contracts/MonadCritter/hooks';
+import { usePWA } from '../hooks/usePWA';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { Footer } from '../components/Footer';
 
 // Import sprite assets
 import commonSprite64 from '/assets/sprites/common-64.png';
@@ -15,20 +18,13 @@ import uncommonSprite64 from '/assets/sprites/uncommon-64.png';
 import rareSprite64 from '/assets/sprites/rare-64.png';
 import legendarySprite64 from '/assets/sprites/legendary-64.png';
 
-import commonSprite256 from '/assets/sprites/common-256.png';
-import uncommonSprite256 from '/assets/sprites/uncommon-256.png';
-import rareSprite256 from '/assets/sprites/rare-256.png';
-import legendarySprite256 from '/assets/sprites/legendary-256.png';
 
-// Additional import for the sprite CSS
-import '/assets/sprites/sprites.css';
-
-// Rarity types configuration with updated image paths
+// Rarity types configuration with video previews
 const RARITY_TYPES = [
-  { name: 'Common', chance: '70%', boost: '0%', image: commonSprite256, smallImage: commonSprite64, color: 'from-gray-400 to-gray-600', minStat: 40, maxStat: 100 },
-  { name: 'Uncommon', chance: '20%', boost: '+10%', image: uncommonSprite256, smallImage: uncommonSprite64, color: 'from-green-400 to-green-600', minStat: 44, maxStat: 110 },
-  { name: 'Rare', chance: '9%', boost: '+25%', image: rareSprite256, smallImage: rareSprite64, color: 'from-blue-400 to-blue-600', minStat: 50, maxStat: 125 },
-  { name: 'Legendary', chance: '1%', boost: '+50%', image: legendarySprite256, smallImage: legendarySprite64, color: 'from-yellow-400 to-yellow-600', minStat: 60, maxStat: 150 },
+  { name: 'Common', chance: '70%', boost: '0%', video: '/common.mp4', smallImage: commonSprite64, color: 'from-gray-400 to-gray-600', minStat: 40, maxStat: 100 },
+  { name: 'Uncommon', chance: '20%', boost: '+10%', video: '/uncommon.mp4', smallImage: uncommonSprite64, color: 'from-green-400 to-green-600', minStat: 44, maxStat: 110 },
+  { name: 'Rare', chance: '9%', boost: '+25%', video: '/rare.mp4', smallImage: rareSprite64, color: 'from-blue-400 to-blue-600', minStat: 50, maxStat: 125 },
+  { name: 'Legendary', chance: '1%', boost: '+50%', video: '/legendary.mp4', smallImage: legendarySprite64, color: 'from-yellow-400 to-yellow-600', minStat: 60, maxStat: 150 },
 ] as const;
 
 /**
@@ -46,6 +42,9 @@ const HomePage: React.FC = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [currentRarityIndex, setCurrentRarityIndex] = useState(0);
   const { hasCritter, isLoading: isCheckingCritter } = useHasCritter(address);
+  const { isInstallable, promptToInstall, resetPWAState } = usePWA();
+  const [isMobile, setIsMobile] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   
   // Mint functionality
   const { writeContractAsync, isPending: isMinting } = useMintCritter();
@@ -114,6 +113,27 @@ const HomePage: React.FC = () => {
 
   const currentRarity = RARITY_TYPES[currentRarityIndex];
   
+  // Add PWA-related effects
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem('pwa-prompt-dismissed') === 'true';
+    setIsDismissed(dismissed);
+  }, []);
+
+  const handleDismiss = () => {
+    setIsDismissed(true);
+    localStorage.setItem('pwa-prompt-dismissed', 'true');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900">
       {/* Background elements */}
@@ -126,6 +146,73 @@ const HomePage: React.FC = () => {
 
         {/* Main Content */}
         <div className="relative z-10 max-w-6xl mx-auto px-4 pt-4 pb-12">
+          {/* PWA Install Prompt */}
+          {(isInstallable && !isDismissed) && (
+            <div 
+              className={`
+                mb-6 relative flex items-center gap-4 p-4 
+                ${isMobile ? 'mx-4' : 'mx-auto max-w-2xl'}
+                bg-gradient-to-r from-purple-900/95 to-blue-900/95 backdrop-blur-md
+                rounded-xl border border-purple-500/20 shadow-2xl
+                animate-slideUp
+              `}
+            >
+              <div className="flex-1">
+                <h3 className="font-bold text-white mb-1">Install Clash of Critters</h3>
+                <p className="text-sm text-gray-300">Get the best experience with our app</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Not Now button */}
+                <button
+                  onClick={handleDismiss}
+                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                >
+                  Not Now
+                </button>
+
+                {/* Install button */}
+                <button
+                  onClick={promptToInstall}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  Install
+                </button>
+
+                {/* Close button */}
+                <button
+                  onClick={handleDismiss}
+                  className="p-2 text-gray-400 hover:text-white rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Debug Reset Button - Only in development */}
+          {import.meta.env.DEV && !isInstallable && (
+            <button
+              onClick={resetPWAState}
+              className="fixed bottom-4 right-4 px-4 py-2 bg-purple-600 text-white rounded-lg z-50"
+            >
+              Reset PWA State
+            </button>
+          )}
+
           {/* Top Actions */}
           <div className="flex justify-end items-center mb-6 gap-3">
             <div className="flex gap-3 items-center">
@@ -281,18 +368,21 @@ const HomePage: React.FC = () => {
                     onHoverEnd={() => setIsHovered(false)}
                     className={`w-full pb-[100%] bg-gradient-to-br ${currentRarity.color} rounded-lg shadow-2xl overflow-hidden relative backdrop-blur-sm`}
                   >
-                    {/* NFT preview */}
-                    <img
-                      src={currentRarity.image}
-                      alt={`${currentRarity.name} MonadCritter`}
-                      className="absolute inset-0 w-full h-full object-contain p-4"
+                    {/* Video preview */}
+                    <video
+                      src={currentRarity.video}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="absolute inset-0 w-full h-full object-cover"
                     />
 
                     {/* Glowing effect */}
                     <div className={`absolute inset-0 bg-gradient-to-br ${currentRarity.color} rounded-2xl blur-xl opacity-20`} />
 
                     {/* Rarity badge */}
-                    <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-black/50 backdrop-blur-sm text-sm font-medium">
+                    <div className="absolute bottom-2 right-2 px-4 py-2 rounded-lg bg-black/60 backdrop-blur-sm text-sm font-semibold border border-white/10 shadow-xl">
                       {currentRarity.name}
                     </div>
                   </motion.div>
@@ -785,34 +875,11 @@ const HomePage: React.FC = () => {
               </>
             )}
           </AnimatePresence>
-          
-          {/* Footer */}
-          <footer className="py-8 px-4 text-center text-gray-400 text-sm border-t border-white/10">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <img src="/monad-logo.svg" alt="Monad" className="w-5 h-5" />
-              <p>Built on Monad Testnet • Powered by Pyth Network</p>
-            </div>
-            <div className="flex items-center justify-center space-x-6">
-              <a
-                href="https://x.com/CritterClashFi"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                Follow 𝕏 
-              </a>
-              <a
-                href="https://t.me/clashofcritters/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                Join Telegram
-              </a>
-            </div>
-          </footer>
         </div>
       </div>
+
+      {/* New Footer */}
+      <Footer />
     </div>
   );
 };

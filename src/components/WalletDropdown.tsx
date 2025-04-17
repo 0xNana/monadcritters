@@ -33,7 +33,7 @@ export function WalletDropdown({ isOpen, onClose, address, walletType }: WalletD
       case 'coinbase':
         return '/coinbase-icon.png'
       default:
-        return '/monad-icon.png'
+        return '/monad-logo.svg'
     }
   }
 

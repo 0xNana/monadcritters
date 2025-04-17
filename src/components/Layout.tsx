@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { MobileMenu } from './MobileMenu'
 import { useState } from 'react'
+import { Footer } from './Footer'
 
 export const navigation = [
   { name: 'Lobby', href: '/clashes', icon: UsersIcon },
@@ -106,30 +107,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {children}
       </main>
 
-      <footer className="py-8 px-4 text-center text-gray-400 text-sm border-t border-white/10">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <img src="/monad-logo.svg" alt="Monad" className="w-5 h-5" />
-          <p>Built on Monad Testnet • High Performance L1 Blockchain</p>
-        </div>
-        <div className="flex items-center justify-center space-x-6">
-          <a
-            href="https://x.com/CritterClashFi"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            𝕏 Twitter
-          </a>
-          <a
-            href="https://t.me/clashofcritters"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            Telegram
-          </a>
-        </div>
-      </footer>
+      <Footer />
 
       <MobileMenu
         isOpen={isMobileMenuOpen}

@@ -49,7 +49,7 @@ const appKit = createAppKit({
     name: 'Clash Of Critters',
     description: 'Clash with your critters on Monad testnet!',
     url: window.location.origin || 'https://clashofcritters.com',
-    icons: [window.location.origin + '/logo.png' || 'https://clashofcritters.com/logo.png'],
+    icons: [`${window.location.origin}/android-chrome-512x512.png`],
   },
   features: {
     email: true,
