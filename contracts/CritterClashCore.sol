@@ -4,136 +4,65 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@pythnetwork/entropy-sdk-solidity/IEntropy.sol";
-import "@pythnetwork/entropy-sdk-solidity/IEntropyConsumer.sol";
 import "./MonadCritter.sol";
 import "./CritterClashStats.sol";
 import "./CritterClashStorage.sol";
+import "./HouseManager.sol";
+import "./ScoreCalculator.sol";
+import "./modules/CritterClashRevenue.sol";
+import "./modules/CritterClashEntropy.sol";
+import "./modules/CritterClashAdmin.sol";
+import "./modules/CritterClashExternal.sol";
 
 /**
  * @title CritterClashCore
- * @dev Main contract for CritterClash game logic
+ * @dev Main contract for CritterClash game logic, now modularized
  */
-contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsumer, CritterClashStorage {
+contract CritterClashCore is 
+    ReentrancyGuard,    
+    Pausable,           
+    Ownable,            
+    CritterClashStorage,      
+    CritterClashRevenue,      
+    CritterClashEntropy,      
+    CritterClashAdmin,        
+    CritterClashExternal      
+{
     MonadCritter public immutable critterContract;
-    CritterClashStats public statsContract;
-    IEntropy public immutable entropy;
-    address public immutable entropyProvider;
+    HouseManager public immutable houseManager;  
     
-    // Add new state variable for tracking entropy requests
-    mapping(uint256 => uint256) public clashPendingRandomness;
-    
-    // Convert constants to state variables
-    uint256 public clashDuration = 60; // Default 60 seconds
-    
-    // Events
-    event ClashUpdate(
-        uint256 indexed clashId,
-        CritterClashStorage.ClashSize indexed clashSize,
-        CritterClashStorage.ClashState state,
-        address player,
-        uint256 critterId,
-        uint256 timestamp
-    );
-
-    event ClashCompleted(
-        uint256 indexed clashId,
-        address[] players,
-        uint256[] scores,
-        uint256[] rewards,
-        uint256[] boostCounts
-    );
-
+    // Core events
     event ClashJoined(uint256 indexed clashId, address indexed player, uint256 critterId, uint256 boostCount, uint256 fee);
     event ClashStarted(uint256 indexed clashId, address[] players, uint256[] critterIds);
-    event EntryFeeUpdated(CritterClashStorage.ClashSize indexed clashSize, uint256 newFee);
-    event ClashTypeUpdated(CritterClashStorage.ClashSize indexed clashSize, bool isActive);
-    event BoostsUsed(address indexed player, uint256 amount);
-    event BoostsPurchased(address indexed player, uint256 amount, uint256 cost, address tokenAddress);
-    event StatsContractSet(address statsContract);
-    event EntropyTimeout(uint256 indexed clashId);
-    event DAOFeeWithdrawn(uint256 amount);
-    event BoostFeesWithdrawn(uint256 amount);
-    event DAOFeeUpdated(uint256 oldFee, uint256 newFee);
-    event PowerUpFeeUpdated(uint256 oldFee, uint256 newFee);
-    event EntropyFeeDeposited(uint256 amount);
-    event EntropyFeeWithdrawn(uint256 amount);
-    event InsufficientEntropyFee(uint256 required, uint256 available);
-    event EntropyRequested(uint256 indexed clashId, uint256 requestId, uint256 fee);
-    event EntropyRequestFailed(uint256 indexed clashId, uint256 fee);
-    
-    function setRewardPercentages(CritterClashStorage.ClashSize clashSize, uint256[] memory percentages) public onlyOwner {
-        require(clashSize != CritterClashStorage.ClashSize.None, "Invalid clash size");
-        require(percentages.length == clashTypes[clashSize].numWinners, "Invalid number of percentages");
-        
-        uint256 total = 0;
-        for (uint256 i = 0; i < percentages.length; i++) {
-            total += percentages[i];
-        }
-        require(total == 100, "Percentages must sum to 100");
-        
-        delete clashTypes[clashSize].rewardPercentages;
-        for (uint256 i = 0; i < percentages.length; i++) {
-            clashTypes[clashSize].rewardPercentages.push(percentages[i]);
-        }
-    }
+    event ClashCompleted(uint256 indexed clashId, address[] players, uint256[] scores, uint256[] rewards, uint256[] boostCounts);
+    event ClashUpdate(uint256 indexed clashId, ClashSize indexed clashSize, ClashState state, address player, uint256 critterId, uint256 timestamp);
 
     constructor(
         address _critterContract,
         address _statsContract,
         address _entropyProvider,
-        address _entropy
-    ) {
+        address _entropy,
+        address _houseManager,
+        address _scoreCalculator
+    ) 
+        CritterClashRevenue()
+        CritterClashEntropy(_entropyProvider, _entropy)
+        CritterClashAdmin()
+        CritterClashExternal()
+    {
         require(_critterContract != address(0), "Invalid critter contract");
         require(_statsContract != address(0), "Invalid stats contract");
-        require(_entropyProvider != address(0), "Invalid entropy provider");
-        require(_entropy != address(0), "Invalid entropy contract");
+        require(_houseManager != address(0), "Invalid house manager");
+        require(_scoreCalculator != address(0), "Invalid score calculator");
         
         critterContract = MonadCritter(_critterContract);
         statsContract = CritterClashStats(_statsContract);
-        entropyProvider = _entropyProvider;
-        entropy = IEntropy(_entropy);
-        
-        // Initialize clash types with default values
-        clashTypes[CritterClashStorage.ClashSize.Two] = CritterClashStorage.ClashType({
-            entryFee: 0.1 ether,
-            maxPlayers: 2,
-            numWinners: 1,
-            isActive: true,
-            rewardPercentages: new uint256[](0)
-        });
-        
-        clashTypes[CritterClashStorage.ClashSize.Four] = CritterClashStorage.ClashType({
-            entryFee: 0.1 ether,
-            maxPlayers: 4,
-            numWinners: 2,
-            isActive: true,
-            rewardPercentages: new uint256[](0)
-        });
-        
-        // Set default reward percentages
-        uint256[] memory twoPlayerRewards = new uint256[](1);
-        twoPlayerRewards[0] = 100;
-        setRewardPercentages(CritterClashStorage.ClashSize.Two, twoPlayerRewards);
-        
-        uint256[] memory fourPlayerRewards = new uint256[](2);
-        fourPlayerRewards[0] = 70;
-        fourPlayerRewards[1] = 30;
-        setRewardPercentages(CritterClashStorage.ClashSize.Four, fourPlayerRewards);
-        
-        // Set default clash duration to 5 minutes
-        clashDuration = 300;
-        
-        // Initialize power-up fee percent to 10%
-        powerUpFeePercent = 10;
+        houseManager = HouseManager(_houseManager);
+        scoreCalculator = ScoreCalculator(_scoreCalculator);
         
         // Initialize game settings
         _initializeClashTypes();
         _initialize();
-        
-        // Initialize entropy storage
-        entropyStorage.nextSequenceNumber = 0;
-        entropyStorage.entropyFeeBalance = 0;
         
         emit StatsContractSet(_statsContract);
     }
@@ -150,9 +79,9 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
     }
     
     function _initialize() internal virtual {
-        // Initialize fees
-        daoFeePercent = 5; // 5% DAO fee
-        powerUpFeePercent = 10; // 10% boost fee
+        // Remove revenue initialization
+        // daoFeePercent = 5; // 5% DAO fee
+        // powerUpFeePercent = 10; // 10% boost fee
     }
     
     function _initializeClashTypes() private {
@@ -162,10 +91,16 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         clashTypes[CritterClashStorage.ClashSize.Two] = CritterClashStorage.ClashType({
             maxPlayers: 2,
             numWinners: 1,
-            entryFee: 0.1 ether,
-            rewardPercentages: twoPlayerRewards,
-            isActive: true
+            isActive: true,
+            rewardPercentages: twoPlayerRewards
         });
+        
+        // Set entry fees for each house type (2x2)
+        clashTypes[CritterClashStorage.ClashSize.Two].entryFees[HOUSE_COMMON] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Two].entryFees[HOUSE_UNCOMMON] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Two].entryFees[HOUSE_RARE] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Two].entryFees[HOUSE_LEGENDARY] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Two].entryFees[HOUSE_MIXED] = uint96(0.1 ether);
         
         // Four player clash - Split 70/30
         uint256[] memory fourPlayerRewards = new uint256[](2);
@@ -174,25 +109,37 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         clashTypes[CritterClashStorage.ClashSize.Four] = CritterClashStorage.ClashType({
             maxPlayers: 4,
             numWinners: 2,
-            entryFee: 0.1 ether,
-            rewardPercentages: fourPlayerRewards,
-            isActive: true
+            isActive: true,
+            rewardPercentages: fourPlayerRewards
         });
+        
+        // Set entry fees for each house type (4x4)
+        clashTypes[CritterClashStorage.ClashSize.Four].entryFees[HOUSE_COMMON] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Four].entryFees[HOUSE_UNCOMMON] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Four].entryFees[HOUSE_RARE] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Four].entryFees[HOUSE_LEGENDARY] = uint96(0.1 ether);
+        clashTypes[CritterClashStorage.ClashSize.Four].entryFees[HOUSE_MIXED] = uint96(0.1 ether);
     }
     
+    // Update joinClash to use Revenue module
     function joinClash(
         CritterClashStorage.ClashSize clashSize,
         uint256 critterId,
         uint256 boostCount,
-        bool useInventory
-    ) public payable whenNotPaused nonReentrant {
+        bool useInventory,
+        uint8 preferredHouse  // 255 for mixed, 0-3 for specific house
+    ) external payable whenNotPaused nonReentrant {
         require(clashTypes[clashSize].isActive, "Clash type not active");
+        require(preferredHouse <= 255, "Invalid house preference");
+        require(preferredHouse == 255 || preferredHouse <= 3, "Invalid house value");
         
-        // Get or create clash
-        uint256 clashId = _getOrCreateClash(clashSize);
+        // Get critter's house before creating/joining clash
+        uint8 critterHouse = uint8(critterContract.getHouse(critterId));
+        
+        // Get or create clash with house preference
+        uint256 clashId = _getOrCreateClash(clashSize, preferredHouse);
         CritterClashStorage.Clash storage clash = clashes[clashId];
         
-        // Verify player can join
         require(clash.state == CritterClashStorage.ClashState.ACCEPTING_PLAYERS, "Clash not accepting players");
         require(!_isPlayerInClash(clash, msg.sender), "Already in clash");
         require(clash.playerCount < clashTypes[clashSize].maxPlayers, "Clash is full");
@@ -201,8 +148,17 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         address critterOwner = critterContract.ownerOf(critterId);
         require(critterOwner == msg.sender, "Not owner of critter");
         
-        // Handle boost inventory and payment - only for entry fee and boosts
-        uint256 totalFee = handlePaymentAndBoosts(clashSize, boostCount, useInventory);
+        // Validate house rules
+        bool canJoin = houseManager.canJoinClash(
+            clashId,
+            clashSize,
+            _getExistingCritterIds(clash),
+            critterId
+        );
+        require(canJoin, "House rules prevent joining");
+        
+        // Use Revenue module to handle payment and boosts
+        uint256 totalFee = CritterClashRevenue.handlePaymentAndBoosts(clashSize, boostCount, useInventory);
         require(msg.value >= totalFee, "Insufficient payment");
         
         // OPTIMIZATION: Use the playerCount directly as the index for the mappings
@@ -243,13 +199,9 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
             // Sort scores and players after initial calculation
             _sortClashArrays(clash);
             
-            // Request entropy
-            uint256 entropyFee = entropy.getFee(entropyProvider);
-            require(entropyStorage.entropyFeeBalance >= entropyFee, "Insufficient entropy fee balance");
-            
-            // Request entropy once and record it
-            _requestSingleEntropyForClash(clashId, uint8(maxPlayers));
-            
+            // Request entropy using Entropy module
+            CritterClashEntropy.requestEntropyForClash(clashId, uint8(maxPlayers));
+    
             // Gather player addresses and critter IDs for the event
             address[] memory playerAddresses = new address[](maxPlayers);
             uint256[] memory clashCritterIds = new uint256[](maxPlayers);
@@ -272,85 +224,38 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         return false;
     }
     
-    // OPTIMIZATION: Update entropy callback to use optimized storage
-    function entropyCallback(
-        uint64 sequenceNumber,
-        address provider,
-        bytes32 randomNumber
-    ) internal override {
-        require(provider == entropyProvider, "Invalid entropy provider");
-        require(entropyStorage.randomRequests[sequenceNumber] != bytes32(0), "Invalid sequence number");
-        
-        // Find the clash this callback is for using the mapping
-        uint256 clashId = entropyStorage.requestToClash[sequenceNumber];
-        require(clashId > 0, "Clash not found");
-        
-        // Get the clash and verify its state
-        CritterClashStorage.Clash storage clash = clashes[clashId];
-        require(clash.state == CritterClashStorage.ClashState.CLASHING, "Clash not in progress");
-
-        // Cache player count and entropy source
-        uint8 playerCount = uint8(clash.playerCount);
-        bytes32 entropySource = randomNumber;
-        
-        // Create temporary arrays to store scores and maintain relationships
-        uint256[] memory tempScores = new uint256[](playerCount);
-        address[] memory tempPlayers = new address[](playerCount);
-        uint256[] memory tempCritterIds = new uint256[](playerCount);
-        
-        // Process all players in original order first
-        for (uint8 i = 0; i < playerCount; i++) {
-            // Use original player order for entropy calculation
-            address player = clash.players[i];
-            uint256 critterId = clash.critterIds[i];
-            
-            // Store original order
-            tempPlayers[i] = player;
-            tempCritterIds[i] = critterId;
-            
-            // Calculate base score and apply variance
-            uint256 baseScore = _calculateCritterScore(critterId, clash.boostCount[player]);
-            bytes32 playerSeed = keccak256(abi.encodePacked(entropySource, player));
-            uint256 entropyVariance = 75 + (uint256(playerSeed) % 51);
-            tempScores[i] = (baseScore * entropyVariance) / 100;
+    // Helper function to get existing critter IDs in a clash
+    function _getExistingCritterIds(CritterClashStorage.Clash storage clash) internal view returns (uint256[] memory) {
+        uint256[] memory existingCritterIds = new uint256[](clash.playerCount);
+        for (uint8 i = 0; i < clash.playerCount; i++) {
+            existingCritterIds[i] = clash.critterIds[i];
         }
+        return existingCritterIds;
+    }
+    
+    function _calculateCritterScore(uint256 critterId, uint256 boostCount) internal view returns (uint256) {
+        MonadCritter.Stats memory stats = critterContract.getStats(critterId);
+        uint8 house = uint8(critterContract.getHouse(critterId));
         
-        // Sort all arrays together based on scores
-        for (uint8 i = 0; i < playerCount - 1; i++) {
-            for (uint8 j = 0; j < playerCount - i - 1; j++) {
-                if (tempScores[j] < tempScores[j + 1]) {
-                    // Swap scores
-                    uint256 tempScore = tempScores[j];
-                    tempScores[j] = tempScores[j + 1];
-                    tempScores[j + 1] = tempScore;
-                    
-                    // Swap players
-                    address tempPlayer = tempPlayers[j];
-                    tempPlayers[j] = tempPlayers[j + 1];
-                    tempPlayers[j + 1] = tempPlayer;
-                    
-                    // Swap critter IDs
-                    uint256 tempCritterId = tempCritterIds[j];
-                    tempCritterIds[j] = tempCritterIds[j + 1];
-                    tempCritterIds[j + 1] = tempCritterId;
+        // Determine if this is a mixed clash by checking the clash state
+        bool isMixedClash = false;
+        for (uint256 i = 1; i <= currentClashId; i++) {
+            CritterClashStorage.Clash storage clash = clashes[i];
+            if (clash.state == CritterClashStorage.ClashState.CLASHING) {
+                for (uint8 j = 0; j < clash.playerCount; j++) {
+                    if (clash.critterIds[j] == critterId) {
+                        isMixedClash = (clash.house == 255);
+                        break;
+                    }
                 }
+                break;
             }
         }
         
-        // Update storage with sorted results
-        for (uint8 i = 0; i < playerCount; i++) {
-            clash.sortedScores[i] = tempScores[i];
-            clash.sortedPlayers[i] = tempPlayers[i];
-            clash.sortedCritterIds[i] = tempCritterIds[i];
-        }
-        
-        // Reset all randomness tracking
-        delete entropyStorage.randomRequests[sequenceNumber];
-        delete entropyStorage.requestToClash[sequenceNumber];
-        delete entropyStorage.clashSequenceNumber[clashId];
-        clashPendingRandomness[clashId] = 0;
+        uint256 baseScore = scoreCalculator.calculateBaseScore(stats, house, isMixedClash);
+        return scoreCalculator.calculateScoreWithBoosts(baseScore, boostCount);
     }
-    
+
     // OPTIMIZATION: Updated sort function to properly maintain player-score-critterId relationships
     function _sortClashArrays(CritterClashStorage.Clash storage clash) internal {
         // Create temporary arrays to store sorted data
@@ -407,32 +312,33 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         return address(entropy);
     }
     
-    function _getOrCreateClash(CritterClashStorage.ClashSize clashSize) internal returns (uint256) {
+    function _getOrCreateClash(
+        CritterClashStorage.ClashSize clashSize,
+        uint8 preferredHouse
+    ) internal returns (uint256) {
         require(clashSize != CritterClashStorage.ClashSize.None, "Invalid clash size");
         require(clashTypes[clashSize].isActive, "This clash type is not active");
         
-        // First check the tracked active clash for this size
-        uint256 activeClashId = currentActiveClash[clashSize];
+        // First check the tracked active clash for this size and house
+        uint256 activeClashId = currentActiveClashByHouse[clashSize][preferredHouse];
         if (activeClashId > 0) {
             CritterClashStorage.Clash storage clash = clashes[activeClashId];
             if (clash.state == CritterClashStorage.ClashState.ACCEPTING_PLAYERS && 
-                clash.playerCount < clashTypes[clashSize].maxPlayers) {
+                clash.playerCount < clashTypes[clashSize].maxPlayers &&
+                clash.house == preferredHouse) {
                 return activeClashId;
             }
         }
         
-        // If the tracked clash is not valid, scan all clashes to find a suitable one
-        // (This is a fallback mechanism that should rarely be needed)
-        for (uint256 i = 1; i <= currentClashId; i++) {
-            // Skip the already checked active clash
-            if (i == activeClashId) continue;
-            
+        // If no active clash found for this house preference, scan recent clashes
+        for (uint256 i = currentClashId; i > currentClashId - 10 && i > 0; i--) {
             CritterClashStorage.Clash storage existingClash = clashes[i];
             if (existingClash.clashSize == clashSize && 
                 existingClash.state == CritterClashStorage.ClashState.ACCEPTING_PLAYERS &&
-                existingClash.playerCount < clashTypes[clashSize].maxPlayers) {
-                // Found an existing clash that can be joined - update the current active clash
-                currentActiveClash[clashSize] = i;
+                existingClash.playerCount < clashTypes[clashSize].maxPlayers &&
+                existingClash.house == preferredHouse) {
+                // Found an existing clash that matches preferences
+                currentActiveClashByHouse[clashSize][preferredHouse] = i;
                 return i;
             }
         }
@@ -441,8 +347,8 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         uint256 newClashId = currentClashId + 1;
         currentClashId = newClashId;
         
-        // Set this as the active clash for this size
-        currentActiveClash[clashSize] = newClashId;
+        // Set this as the active clash for this size and house
+        currentActiveClashByHouse[clashSize][preferredHouse] = newClashId;
         
         CritterClashStorage.Clash storage newClash = clashes[newClashId];
         newClash.id = uint128(newClashId);
@@ -451,6 +357,7 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         newClash.playerCount = 0;
         newClash.startTime = 0;
         newClash.isProcessed = false;
+        newClash.house = preferredHouse;
         
         // Initialize all arrays to zero values
         for (uint8 i = 0; i < clashTypes[clashSize].maxPlayers; i++) {
@@ -470,188 +377,13 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         userClashCount[user]++;
     }
     
-    // Set the entry fee for a clash size
-    function setEntryFee(CritterClashStorage.ClashSize clashSize, uint256 entryFeeInEth) external onlyOwner {
-        require(clashSize != CritterClashStorage.ClashSize.None, "Invalid clash size");
-        clashTypes[clashSize].entryFee = uint96(entryFeeInEth);
-        emit EntryFeeUpdated(clashSize, clashTypes[clashSize].entryFee);
-    }
-
-    function setClashTypeActive(CritterClashStorage.ClashSize clashSize, bool isActive) external onlyOwner {
-        require(clashSize != CritterClashStorage.ClashSize.None, "Invalid clash size");
-        clashTypes[clashSize].isActive = isActive;
-        emit ClashTypeUpdated(clashSize, isActive);
-    }
-
-    function setClashType(
-        CritterClashStorage.ClashSize clashSize,
-        uint256 maxPlayers,
-        uint256 numWinners,
-        uint256 entryFeeInEth,
-        uint256[] calldata rewardPercentages
-    ) external onlyOwner {
-        require(maxPlayers > 1 && maxPlayers <= 10, "Invalid max players (2-10)");
-        require(numWinners > 0 && numWinners <= maxPlayers, "Invalid number of winners");
-        require(rewardPercentages.length == numWinners, "Invalid reward percentages length");
-        
-        // Validate reward percentages sum to 100
-        uint256 totalPercentage;
-        for (uint256 i = 0; i < rewardPercentages.length; i++) {
-            totalPercentage += rewardPercentages[i];
-        }
-        require(totalPercentage == 100, "Reward percentages must sum to 100");
-
-        clashTypes[clashSize] = CritterClashStorage.ClashType({
-            maxPlayers: uint96(maxPlayers),
-            numWinners: uint96(numWinners),
-            entryFee: uint96(entryFeeInEth * 1 ether),
-            isActive: false, // Start inactive for safety
-            rewardPercentages: rewardPercentages
-        });
-
-        emit ClashTypeUpdated(clashSize, false);
-        emit EntryFeeUpdated(clashSize, entryFeeInEth * 1 ether);
-    }
-
-    function pause() external onlyOwner {
-        _pause();
-    }
-    
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    // Override payment functions with direct implementations instead of using super
-    function withdrawDAOFee() external onlyOwner nonReentrant {
-        uint256 amount = fundAccounting.daoFees;
-        require(amount > 0, "No DAO fees to withdraw");
-        fundAccounting.daoFees = 0;
-        (bool success, ) = payable(owner()).call{value: amount}("");
-        require(success, "DAO fee withdrawal failed");
-        emit DAOFeeWithdrawn(amount);
-    }
-
-    function withdrawBoostFees() external onlyOwner nonReentrant {
-        uint256 amount = fundAccounting.boostFees;
-        require(amount > 0, "No boost fees to withdraw");
-        fundAccounting.boostFees = 0;
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Boost fee withdrawal failed");
-        emit BoostFeesWithdrawn(amount);
-    }
-
-    function setDAOFeePercent(uint256 newFeePercent) external onlyOwner {
-        require(newFeePercent <= 20, "Fee too high"); // Max 20%
-        uint256 oldFee = daoFeePercent;
-        daoFeePercent = uint128(newFeePercent);
-        emit DAOFeeUpdated(oldFee, newFeePercent);
-    }
-
-    function setPowerUpFeePercent(uint256 newFeePercent) external onlyOwner {
-        require(newFeePercent <= 50, "Fee too high"); // Max 50%
-        uint256 oldFee = powerUpFeePercent;
-        powerUpFeePercent = uint128(newFeePercent);
-        emit PowerUpFeeUpdated(oldFee, newFeePercent);
-    }
-
-    function withdrawEmergencyFund() external onlyOwner nonReentrant {
-        uint256 balance = address(this).balance;
-        uint256 reservedFunds = fundAccounting.prizePool + entropyStorage.entropyFeeBalance;
-        require(balance > reservedFunds, "No excess funds available");
-        
-        uint256 emergencyFunds = balance - reservedFunds;
-        (bool success, ) = msg.sender.call{value: emergencyFunds}("");
-        require(success, "Emergency fund withdrawal failed");
-    }
-
-    function getRequiredEntropyFee(uint256 playerCount) public view returns (uint256) {
-        return entropy.getFee(entropyProvider) * playerCount;
-    }
-
-    // Essential view functions
-    function getClashTypeInfo(CritterClashStorage.ClashSize clashSize) external view returns (
-        uint256 entryFee,
-        uint256 boostFeePercent,
-        uint256[] memory rewardPercentages,
-        uint256 maxPlayers,
-        uint256 numWinners,
-        bool isActive
-    ) {
-        require(clashSize != CritterClashStorage.ClashSize.None, "Invalid clash size");
-        CritterClashStorage.ClashType storage clashType = clashTypes[clashSize];
-        
-        // Create a new array and copy the reward percentages
-        uint256[] memory percentages = new uint256[](clashType.rewardPercentages.length);
-        for (uint256 i = 0; i < clashType.rewardPercentages.length; i++) {
-            percentages[i] = clashType.rewardPercentages[i];
-        }
-        
-        return (
-            clashType.entryFee,
-            powerUpFeePercent,
-            percentages,
-            clashType.maxPlayers,
-            clashType.numWinners,
-            clashType.isActive
-        );
-    }
-
-    // View functions for CritterClashView
-    function getClashPlayer(uint256 clashId, uint256 index) external view returns (address) {
-        require(clashId > 0 && clashId <= currentClashId, "Invalid clash ID");
-        require(index < clashes[clashId].playerCount, "Invalid player index");
-        return clashes[clashId].players[uint8(index)];
-    }
-
-    function getClashCritterId(uint256 clashId, uint256 index) external view returns (uint256) {
-        require(clashId > 0 && clashId <= currentClashId, "Invalid clash ID");
-        require(index < clashes[clashId].playerCount, "Invalid player index");
-        return clashes[clashId].critterIds[uint8(index)];
-    }
-
-    function getClashBoost(uint256 clashId, address player) external view returns (uint256) {
-        require(clashId > 0 && clashId <= currentClashId, "Invalid clash ID");
-        return clashes[clashId].boostCount[player];
-    }
-
-    function getClashScore(uint256 clashId, uint256 index) external view returns (uint256) {
-        require(clashId > 0 && clashId <= currentClashId, "Invalid clash ID");
-        require(index < clashes[clashId].playerCount, "Invalid player index");
-        return clashes[clashId].sortedScores[uint8(index)];
-    }
-
-    function getUserClashIds(address user) external view returns (uint256[] memory) {
-        return _getUserClashIds(user);
-    }
-
-    // Add new view function to get clash details
-    function getClashDetails(uint256 clashId) external view returns (
-        uint256 id,
-        CritterClashStorage.ClashSize clashSize,
-        CritterClashStorage.ClashState state,
-        uint256 playerCount,
-        uint256 startTime,
-        bool isProcessed
-    ) {
-        require(clashId > 0 && clashId <= currentClashId, "Invalid clash ID");
-        CritterClashStorage.Clash storage clash = clashes[clashId];
-        return (
-            clash.id,
-            clash.clashSize,
-            clash.state,
-            clash.playerCount,
-            clash.startTime,
-            clash.isProcessed
-        );
-    }
-
-    // Add the missing handlePaymentAndBoosts function
     function handlePaymentAndBoosts(
         CritterClashStorage.ClashSize clashSize,
         uint256 boostCount,
-        bool useInventory
+        bool useInventory,
+        uint8 houseType
     ) internal returns (uint256) {
-        uint256 entryFee = clashTypes[clashSize].entryFee;
+        uint256 entryFee = clashTypes[clashSize].entryFees[houseType];
         uint256 boostFee = 0;
 
         if (boostCount > 0) {
@@ -666,13 +398,11 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         uint256 totalFee = entryFee + boostFee;
         require(msg.value >= totalFee, "Insufficient payment");
 
-        // Update fund accounting
         fundAccounting.prizePool += entryFee;
         if (boostFee > 0) {
             fundAccounting.boostFees += boostFee;
         }
 
-        emit BoostsUsed(msg.sender, boostCount);
         return totalFee;
     }
 
@@ -680,14 +410,12 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         require(amount > 0, "Must purchase at least 1 boost");
         require(amount <= 10, "Cannot purchase more than 10 boosts at once");
 
-        // Calculate cost (powerUpFeePercent of entry fee per boost for smallest clash size)
-        uint256 entryFee = clashTypes[CritterClashStorage.ClashSize.Two].entryFee;
+        uint256 entryFee = clashTypes[ClashSize.Two].entryFee;
         uint256 pricePerBoost = (entryFee * powerUpFeePercent) / 100;
         uint256 totalCost = pricePerBoost * amount;
 
         require(msg.value >= totalCost, "Insufficient payment");
 
-        // Update boost inventory and fees
         playerBoosts[msg.sender] += amount;
         fundAccounting.boostFees += totalCost;
 
@@ -698,21 +426,6 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
     function setClashDuration(uint256 newDuration) external onlyOwner {
         require(newDuration >= 30 && newDuration <= 3600, "Duration must be between 30s and 1h");
         clashDuration = newDuration;
-    }
-
-    function depositEntropyFee() external payable onlyOwner {
-        require(msg.value > 0, "Must deposit some ETH");
-        entropyStorage.entropyFeeBalance = uint192(uint256(entropyStorage.entropyFeeBalance) + msg.value);
-        emit EntropyFeeDeposited(msg.value);
-    }
-
-    function withdrawEntropyFee() external onlyOwner nonReentrant {
-        uint256 amount = entropyStorage.entropyFeeBalance;
-        if (amount == 0) return; // Just return if no fees to withdraw
-        entropyStorage.entropyFeeBalance = 0;
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Entropy fee withdrawal failed");
-        emit EntropyFeeWithdrawn(amount);
     }
 
     function getClashInfo(uint256 clashId) external view returns (
@@ -779,78 +492,7 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         // Allow contract to receive ETH
     }
 
-    // Modify handleEntropyCallback to remove test logging
-    function handleEntropyCallback(
-        uint64 sequenceNumber,
-        address provider,
-        bytes32 randomNumber
-    ) external {
-        // Only entropy provider can call back
-        require(msg.sender == address(entropy), "Only entropy contract can call");
-        require(provider == entropyProvider, "Invalid provider");
-        entropyCallback(sequenceNumber, provider, randomNumber);
-    }
-
-    function _calculateBaseScore(MonadCritter.Stats memory stats) internal pure returns (uint256) {
-        // OPTIMIZATION: Use a fixed array in memory to avoid repeated storage access
-        // Get rarity multiplier (1.0, 1.1, 1.25, 1.5)
-        uint256 rarityMultiplier;
-        
-        // OPTIMIZATION: Use if/else instead of array lookup to save gas
-        uint8 rarity = uint8(stats.rarity);
-        if (rarity == 0) rarityMultiplier = 100;      // Common: 1.0x
-        else if (rarity == 1) rarityMultiplier = 110; // Uncommon: 1.1x
-        else if (rarity == 2) rarityMultiplier = 125; // Rare: 1.25x
-        else rarityMultiplier = 150;                  // Legendary: 1.5x
-        
-        // OPTIMIZATION: Cache converted stats to avoid repeated conversions
-        uint256 speed = uint256(stats.speed);
-        uint256 stamina = uint256(stats.stamina);
-        uint256 luck = uint256(stats.luck);
-        
-        // OPTIMIZATION: Simplify calculations by pre-computing weights
-        // Weight the stats - speed (120%), stamina (100%), luck (80%)
-        uint256 weightedSpeed = (speed * 12) / 10;
-        uint256 weightedLuck = (luck * 8) / 10;
-        
-        // OPTIMIZATION: Combine multiplications to reduce computational steps
-        // Calculate base score using weighted multiplicative formula
-        uint256 baseScore = weightedSpeed * stamina * weightedLuck;
-        baseScore = baseScore / 100; // Scale down after multiplications
-        
-        // OPTIMIZATION: Apply rarity multiplier
-        baseScore = (baseScore * rarityMultiplier) / 100;
-        
-        return baseScore / 10;
-    }
-    
-    function _calculateScoreWithBoosts(uint256 baseScore, uint256 boostCount) internal pure returns (uint256) {
-        // OPTIMIZATION: Early return for most common case
-        if (boostCount == 0) return baseScore;
-        
-        // OPTIMIZATION: Simplified boost logic with fewer conditionals
-        // First boost gives 20% (1.2x), subsequent boosts give 15% each (1.15x)
-        uint256 boostedScore = baseScore * 120 / 100; // Apply first boost
-        
-        // OPTIMIZATION: Special case for single boost (most common)
-        if (boostCount == 1) return boostedScore;
-        
-        // OPTIMIZATION: Apply additional boosts with a loop for any number of boosts
-        for (uint256 i = 1; i < boostCount; i++) {
-            boostedScore = boostedScore * 115 / 100;
-        }
-        
-        return boostedScore;
-    }
-    
-    // OPTIMIZATION: Add a combined function to compute the score in one pass for frequently used code paths
-    function _calculateCritterScore(uint256 critterId, uint256 boostCount) internal view returns (uint256) {
-        MonadCritter.Stats memory stats = critterContract.getStats(critterId);
-        uint256 baseScore = _calculateBaseScore(stats);
-        return _calculateScoreWithBoosts(baseScore, boostCount);
-    }
-
-    // OPTIMIZATION: Updated to work with the new storage structure
+    // Update completeClash to use Entropy module's functions
     function completeClash(uint256 clashId) external whenNotPaused nonReentrant {
         require(clashId > 0 && clashId <= currentClashId, "Invalid clash ID");
         CritterClashStorage.Clash storage clash = clashes[clashId];
@@ -881,13 +523,12 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
             require(isParticipant, "Only participants or admin can complete clash");
         }
         
-        // Check if we're still waiting for entropy
-        if (clashPendingRandomness[clashId] != 0) {
+        // Check if we're still waiting for entropy using Entropy module
+        if (isWaitingForEntropy(clashId)) {
             // If we've waited too long for entropy (over clash duration), use fallback
             if (block.timestamp >= clash.startTime + clashDuration) {
                 _calculateFallbackScores(clash, clashId);
-                clashPendingRandomness[clashId] = 0;
-                emit EntropyTimeout(clashId);
+                clearEntropyRequest(clashId);
             } else {
                 revert("Still waiting for entropy");
             }
@@ -896,123 +537,71 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         // Mark as processed first to prevent reentrancy
         clash.isProcessed = true;
         
-        // Calculate prize pool and fees
-        uint256 prizePool = clashTypes[clash.clashSize].entryFee * clash.playerCount;
-        uint256 daoFeeAmount = (prizePool * daoFeePercent) / 100;
-        uint256 distributablePrize = prizePool - daoFeeAmount;
-        
-        // Update fund accounting
-        fundAccounting.prizePool -= prizePool;
-        fundAccounting.daoFees += daoFeeAmount;
-        
-        // OPTIMIZATION: Use memory arrays for return values but optimized mappings for storage
-        uint256[] memory rewardArray = new uint256[](clash.playerCount);
-        uint256[] memory boostArray = new uint256[](clash.playerCount);
-        
-        // Clear previous results - reset resultCount
-        clash.resultCount = 0;
-        
-        // Process winners and update stats
-        for (uint8 i = 0; i < uint8(clash.playerCount); i++) {
-            address payable player = payable(clash.sortedPlayers[i]);
-            uint256 critterId = clash.sortedCritterIds[i];
-            uint256 reward = 0;
-            
-            // Calculate reward for winners
-            if (i < clashTypes[clash.clashSize].numWinners) {
-                reward = (distributablePrize * clashTypes[clash.clashSize].rewardPercentages[i]) / 100;
-            }
-            
-            // Record reward and boost count
-            rewardArray[i] = reward;
-            boostArray[i] = clash.boostCount[player];
-            
-            // Store result using the optimized structure
-            _addClashResult(clashId, CritterClashStorage.ClashResult({
-                player: player,
-                critterId: uint128(critterId),
-                position: uint32(i + 1),
-                reward: uint64(reward),
-                score: uint32(clash.sortedScores[i])
-            }));
-            
-            // Update player and critter stats
-            statsContract.updatePlayerStats(
-                player,
-                clash.sortedScores[i],
-                i < clashTypes[clash.clashSize].numWinners,
-                reward
-            );
-            
-            // Update critter stats
-            statsContract.updateCritterStats(
-                critterId,
-                i < clashTypes[clash.clashSize].numWinners
-            );
-            
-            // Transfer reward
-            if (reward > 0) {
-                (bool success, ) = player.call{value: reward}("");
-                require(success, "Reward transfer failed");
-            }
-        }
+        // Use Revenue module to handle prize distribution
+        CritterClashRevenue.distributePrizes(
+            clashId,
+            clash.clashSize,
+            clash.playerCount,
+            clash.sortedPlayers,
+            clash.sortedCritterIds,
+            clash.sortedScores,
+            clashTypes[clash.clashSize].numWinners,
+            clashTypes[clash.clashSize].rewardPercentages
+        );
         
         // Update clash state
         clash.state = CritterClashStorage.ClashState.COMPLETED_WITH_RESULTS;
         
         // Reset current active clash for this size since this one is complete
-        currentActiveClash[clash.clashSize] = 0;
-        
-        // OPTIMIZATION: Create arrays for event emission
-        address[] memory playerArray = new address[](clash.playerCount);
-        uint256[] memory scoreArray = new uint256[](clash.playerCount);
-        
-        for (uint8 i = 0; i < uint8(clash.playerCount); i++) {
-            playerArray[i] = clash.sortedPlayers[i];
-            scoreArray[i] = clash.sortedScores[i];
-        }
+        currentActiveClashByHouse[clash.clashSize][clash.house] = 0;
         
         // Emit completion events
         emit ClashCompleted(
             clashId,
-            playerArray,
-            scoreArray,
-            rewardArray,
-            boostArray
+            clash.sortedPlayers,
+            clash.sortedScores,
+            clash.sortedCritterIds,
+            clash.boostCount
         );
     }
     
-    // OPTIMIZATION: Updated to work with the new storage structure
+    // Update _calculateFallbackScores to use ScoreCalculator
     function _calculateFallbackScores(CritterClashStorage.Clash storage clash, uint256 clashId) internal {
         uint8 playerCount = uint8(clash.playerCount);
+        bool isMixedClash = clash.house == 255;
         
+        // Create temporary arrays for ScoreCalculator
+        uint256[] memory tempCritterIds = new uint256[](playerCount);
+        address[] memory tempPlayers = new address[](playerCount);
+        
+        // Copy data to temporary arrays
         for (uint8 i = 0; i < playerCount; i++) {
-            // Copy players to sortedPlayers in same order (will be sorted later)
-            clash.sortedPlayers[i] = clash.players[i];
-            uint256 baseScore = _calculateBaseScore(critterContract.getStats(clash.critterIds[i]));
-            
-            // Apply boosts before variance
-            baseScore = _calculateScoreWithBoosts(baseScore, clash.boostCount[clash.players[i]]);
-            
-            // Generate fallback random variance using block data
-            bytes32 fallbackRandom = keccak256(abi.encodePacked(
-                block.timestamp,
-                block.prevrandao,
-                clashId,
-                clash.players[i],
-                clash.critterIds[i],
-                i
-            ));
-            
-            // Convert to a number between 75 and 125 (±25%)
-            uint256 variance = (uint256(fallbackRandom) % 51) + 75;
-            
-            // Apply variance to boosted score
-            clash.sortedScores[i] = (baseScore * variance) / 100;
+            tempCritterIds[i] = clash.critterIds[i];
+            tempPlayers[i] = clash.players[i];
         }
         
-        // Sort players by scores after all scores are calculated
-        _sortClashArrays(clash);
+        // Use ScoreCalculator to calculate final scores with fallback entropy
+        bytes32 fallbackEntropy = keccak256(abi.encodePacked(
+            block.timestamp,
+            block.prevrandao,
+            clashId
+        ));
+        
+        // Calculate final scores using ScoreCalculator
+        ScoreCalculator.ScoreResult memory result = scoreCalculator.calculateFinalScores(
+            tempCritterIds,
+            tempPlayers,
+            clash.boostCount,
+            isMixedClash,
+            fallbackEntropy
+        );
+        
+        // Store results back in clash
+        for (uint8 i = 0; i < playerCount; i++) {
+            clash.sortedScores[i] = result.scores[i];
+            clash.sortedPlayers[i] = result.sortedPlayers[i];
+            clash.sortedCritterIds[i] = result.sortedCritterIds[i];
+        }
     }
     
     // OPTIMIZATION: Re-add the _requestSingleEntropyForClash method
@@ -1072,7 +661,7 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
     }
     
     // OPTIMIZATION: Helper functions that were missing
-    function _getUserClashIds(address user) internal view override returns (uint256[] memory) {
+    function getUserClashIds(address user) external view returns (uint256[] memory) {
         uint256 count = userClashCount[user];
         uint256[] memory ids = new uint256[](count);
         
@@ -1083,9 +672,86 @@ contract CritterClashCore is Ownable, Pausable, ReentrancyGuard, IEntropyConsume
         return ids;
     }
 
-    // Add this function after setPowerUpFeePercent or in the admin functions section
-    function setClashStartTime(uint256 clashId, uint256 startTime) external onlyOwner {
-        require(clashId > 0 && clashId <= currentClashId, "Invalid clash ID");
-        clashes[clashId].startTime = uint64(startTime);
+    // Update onEntropyReceived to handle the only scoring event
+    function onEntropyReceived(uint256 clashId, bytes32 entropy) external override {
+        require(msg.sender == address(scoreCalculator), "Only score calculator");
+        
+        CritterClashStorage.Clash storage clash = clashes[clashId];
+        require(clash.state == CritterClashStorage.ClashState.CLASHING, "Invalid clash state");
+        
+        // Calculate final scores and get sorted arrays in one step
+        ScoreCalculator.ScoreResult memory result = scoreCalculator.calculateFinalScores(
+            clash.critterIds,
+            clash.players,
+            clash.boostCount,
+            clash.house == 255,
+            entropy
+        );
+
+        // Store final sorted arrays
+        clash.scores = result.scores;
+        clash.players = result.sortedPlayers;
+        clash.critterIds = result.sortedCritterIds;
+        
+        // Update state
+        clash.state = CritterClashStorage.ClashState.COMPLETE;
+
+        emit ClashCompleted(
+            clashId,
+            clash.sortedPlayers,
+            clash.sortedScores,
+            clash.sortedCritterIds,
+            clash.boostCount
+        );
+    }
+
+    // Update _transitionToClashing to use ScoreCalculator's sorting
+    function _transitionToClashing(uint256 clashId) internal {
+        Clash storage clash = clashes[clashId];
+        require(clash.state == ClashState.FILLING, "Invalid clash state");
+        require(clash.playerCount > 1, "Not enough players");
+
+        // Update state
+        clash.state = ClashState.CLASHING;
+        
+        // Request entropy without calculating initial scores
+        scoreCalculator.requestEntropyForClash(
+            clash.critterIds,
+            clash.players,
+            clash.boostCount,
+            clash.house == 255,
+            clashId
+        );
+
+        emit ClashStarted(clashId);
+    }
+
+    /**
+     * @dev Get entry fee for a specific clash size and house type
+     */
+    function getEntryFee(CritterClashStorage.ClashSize clashSize, uint8 houseType) public view returns (uint256) {
+        require(houseType == HOUSE_COMMON || 
+                houseType == HOUSE_UNCOMMON || 
+                houseType == HOUSE_RARE || 
+                houseType == HOUSE_LEGENDARY || 
+                houseType == HOUSE_MIXED, "Invalid house type");
+        
+        return clashTypes[clashSize].entryFees[houseType];
+    }
+
+    /**
+     * @dev Admin function to set entry fee for a specific clash size and house type
+     */
+    function setEntryFee(CritterClashStorage.ClashSize clashSize, uint8 houseType, uint256 newFee) external onlyOwner {
+        require(clashSize != CritterClashStorage.ClashSize.None, "Invalid clash size");
+        require(houseType == HOUSE_COMMON || 
+                houseType == HOUSE_UNCOMMON || 
+                houseType == HOUSE_RARE || 
+                houseType == HOUSE_LEGENDARY || 
+                houseType == HOUSE_MIXED, "Invalid house type");
+        
+        uint256 oldFee = clashTypes[clashSize].entryFees[houseType];
+        clashTypes[clashSize].entryFees[houseType] = uint96(newFee);
+        emit EntryFeeUpdated(clashSize, oldFee, newFee);
     }
 }

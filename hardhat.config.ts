@@ -1,6 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import "@nomicfoundation/hardhat-verify";
+// import "@nomicfoundation/hardhat-verify"; // Comment out as hardhat-toolbox includes verify
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -49,14 +49,6 @@ const config: HardhatUserConfig = {
     mocha: {
         require: ["ts-node/register"],
         timeout: 40000
-    },
-    sourcify: {
-        enabled: true,
-        apiUrl: "https://sourcify-api-monad.blockvision.org",
-        browserUrl: "https://testnet.monadexplorer.com"
-    },
-    etherscan: {
-        apiKey: ""
     }
 };
 

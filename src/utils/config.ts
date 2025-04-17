@@ -614,7 +614,7 @@ export const CLASH_CONFIG = {
       size: 1, // ClashSize.Two
       maxPlayers: 2,
       numWinners: 1,
-      entryFee: '1', // 1 MON for 2-player clash
+      entryFee: '0.1', // 0.1 MON for 2-player clash
       rewardPercentages: [100], // Winner takes all
       isActive: true
     },
@@ -622,7 +622,7 @@ export const CLASH_CONFIG = {
       size: 2, // ClashSize.Four
       maxPlayers: 4,
       numWinners: 2,
-      entryFee: '2', // 2 MON for 4-player clash
+      entryFee: '0.1', // 0.1 MON for 4-player clash
       rewardPercentages: [70, 30], // Split 70/30
       isActive: true
     }

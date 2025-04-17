@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./CritterClashStats.sol";  
 
 /**
  * @title CritterClashStorage
@@ -20,6 +21,13 @@ abstract contract CritterClashStorage is Ownable {
         COMPLETED_WITH_RESULTS // Results distributed
     }
     
+    // Constants for house types
+    uint8 public constant HOUSE_COMMON = 0;
+    uint8 public constant HOUSE_UNCOMMON = 1;
+    uint8 public constant HOUSE_RARE = 2;
+    uint8 public constant HOUSE_LEGENDARY = 3;
+    uint8 public constant HOUSE_MIXED = 255;
+    
     struct TokenInfo {
         bool isActive;
         uint248 entryFeeAmount;
@@ -28,7 +36,7 @@ abstract contract CritterClashStorage is Ownable {
     struct ClashType {
         uint96 maxPlayers;
         uint96 numWinners;
-        uint96 entryFee;
+        mapping(uint8 => uint96) entryFees;  // Entry fees per house type
         bool isActive;
         uint256[] rewardPercentages;
     }
@@ -38,6 +46,7 @@ abstract contract CritterClashStorage is Ownable {
         ClashSize clashSize;
         ClashState state;
         uint8 playerCount;
+        uint8 house;  // 0=Common, 1=Uncommon, 2=Rare, 3=Legendary, 255=mixed
         uint64 startTime;
         bool isProcessed;
         
@@ -68,9 +77,11 @@ abstract contract CritterClashStorage is Ownable {
     }
 
     struct FundAccounting {
-        uint256 prizePool;
-        uint256 daoFees;
-        uint256 boostFees;
+        uint256 prizePool;       // Total funds available for prizes
+        uint256 daoFees;        // Accumulated DAO fees
+        uint256 boostFees;      // Accumulated boost fees
+        uint256 entropyFees;    // Accumulated entropy fees
+        uint256 platformFees;   // Accumulated platform fees from external collections
     }
 
     struct EntropyStorage {
@@ -81,9 +92,27 @@ abstract contract CritterClashStorage is Ownable {
         uint192 entropyFeeBalance;
     }
 
+    // Revenue tracking
+    struct RevenueInfo {
+        uint256 totalFees;           // Total fees collected
+        uint256 platformShare;       // Platform's share
+        uint256 collectionShare;     // Collection's share
+        uint256 lastDistributed;     // Last distribution timestamp
+    }
+
+    // Revenue mapping per collection
+    mapping(address => RevenueInfo) public collectionRevenue;
+    
+    // Platform fee percentages
+    uint256 public platformFeePercent;     // Base platform fee
+    uint256 public collectionFeePercent;   // Base collection fee
+    
+    // Minimum amounts for distribution
+    uint256 public constant MIN_DISTRIBUTION = 0.1 ether;
+
     mapping(ClashSize => ClashType) public clashTypes;
     mapping(uint256 => Clash) public clashes;
-    mapping(ClashSize => uint256) public currentActiveClash;
+    mapping(ClashSize => mapping(uint8 => uint256)) public currentActiveClashByHouse;  // Track active clashes by size and house
     uint256 public currentClashId;
     
     mapping(address => uint256) public playerBoosts;
@@ -99,6 +128,9 @@ abstract contract CritterClashStorage is Ownable {
     EntropyStorage public entropyStorage;
 
     address public constant NATIVE_TOKEN = address(0);
+
+    // Add shared contract references
+    CritterClashStats public statsContract;
 
     function _getClashResult(uint256 clashId, uint8 index) internal view returns (ClashResult storage) {
         return clashes[clashId].results[index];
@@ -137,4 +169,4 @@ abstract contract CritterClashStorage is Ownable {
         
         return ids;
     }
-} 
+}
